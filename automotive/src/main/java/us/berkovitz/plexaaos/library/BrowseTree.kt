@@ -115,7 +115,9 @@ fun MediaMetadataCompat.Builder.from(playlist: Playlist): MediaMetadataCompat.Bu
     mediaUri = playlist.getServer()?.urlFor(playlist.key) ?: playlist.key
     flag = MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
     trackCount = playlist.leafCount.toLong()
-    duration = playlist.duration.toLong()
+    if(playlist.duration > 0) {
+        duration = playlist.duration.toLong()
+    }
 
     // To make things easier for *displaying* these, set the display properties as well.
     displayTitle = playlist.title
@@ -141,9 +143,9 @@ fun MediaMetadataCompat.Builder.from(mediaItem: us.berkovitz.plexapi.media.Media
     trackCount = 1
     duration = mediaItem.duration.toLong()
 
-    val iconUrl = if(mediaItem.thumb.isNotEmpty()){
+    val iconUrl = if(!mediaItem.thumb.isNullOrEmpty()){
         mediaItem.thumb
-    } else if(mediaItem.parentThumb.isNotEmpty()) {
+    } else if(!mediaItem.parentThumb.isNullOrEmpty()) {
         mediaItem.parentThumb
     } else {
         mediaItem.grandparentThumb

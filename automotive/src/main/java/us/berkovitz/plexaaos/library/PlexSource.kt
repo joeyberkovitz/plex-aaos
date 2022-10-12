@@ -51,7 +51,7 @@ class PlexSource(private val plexToken: String): AbstractMusicSource() {
             var connUrl = ""
             if(server.connections != null) {
                 for (conn in server.connections!!) {
-                    if (conn.local != 0) {
+                    if (conn.local == 0) {
                         hasRemote = true
                         connUrl = conn.uri
                         break

@@ -3,6 +3,21 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/joeyberkovitz/kotlin-plexapi")
+        credentials {
+            Properties properties = new Properties()
+            properties.load(project.rootProject.file('local.properties').newDataInputStream())
+            username = properties.getProperty("gpr_user") ?: System.getenv("GITHUB_ACTOR")
+            password = properties.getProperty("gpr_key") ?: System.getenv("GITHUB_TOKEN")
+        }
+    }
+    google()
+    mavenLocal()
+    mavenCentral()
+}
+
 android {
     namespace 'us.berkovitz.plexaaos'
     compileSdk 33
@@ -64,7 +79,7 @@ dependencies {
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_ui_version"
 
     implementation 'androidx.media:media:1.6.0'
-    implementation 'us.berkovitz:kotlin-plexapi:1.0-SNAPSHOT'
+    implementation 'us.berkovitz:kotlin-plexapi:0.1.2'
 
     api "com.google.android.exoplayer:exoplayer-core:$exoplayer_version"
     api "com.google.android.exoplayer:exoplayer-ui:$exoplayer_version"

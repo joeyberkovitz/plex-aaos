@@ -3,6 +3,14 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+repositories {
+    google()
+    mavenLocal()
+    mavenCentral()
+}
+
+
+
 android {
     namespace 'us.berkovitz.plexaaos'
     compileSdk 33

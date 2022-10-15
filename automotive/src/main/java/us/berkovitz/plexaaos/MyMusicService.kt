@@ -36,9 +36,11 @@ import us.berkovitz.plexaaos.library.BrowseTree
 import us.berkovitz.plexaaos.library.MusicSource
 import us.berkovitz.plexaaos.library.PlexSource
 import us.berkovitz.plexaaos.library.UAMP_BROWSABLE_ROOT
+import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
 import us.berkovitz.plexaaos.library.from
 import us.berkovitz.plexapi.logging.Logger
 import us.berkovitz.plexapi.logging.LoggingFactory
+import us.berkovitz.plexapi.media.Track
 
 /**
  * This class provides a MediaBrowser through a service. It exposes the media library to a browsing
@@ -170,8 +172,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         // Build a PendingIntent that can be used to launch the UI.
         val sessionActivityPendingIntent =
             packageManager?.getLaunchIntentForPackage(packageName)?.let { sessionIntent ->
-                PendingIntent.getActivity(this, 0, sessionIntent,
-                    PendingIntent.FLAG_IMMUTABLE)
+                PendingIntent.getActivity(
+                    this, 0, sessionIntent,
+                    PendingIntent.FLAG_IMMUTABLE
+                )
             }
 
         // Create a new MediaSession.
@@ -182,7 +186,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
         sessionToken = mediaSession.sessionToken
 
-        if(!isAuthenticated()){
+        if (!isAuthenticated()) {
             requireLogin()
             return
         }
@@ -222,9 +226,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         exoPlayer.release()
     }
 
-    override fun onGetRoot(clientPackageName: String,
-                           clientUid: Int,
-                           rootHints: Bundle?): MediaBrowserServiceCompat.BrowserRoot {
+    override fun onGetRoot(
+        clientPackageName: String,
+        clientUid: Int,
+        rootHints: Bundle?
+    ): MediaBrowserServiceCompat.BrowserRoot {
         val rootExtras = Bundle().apply {
             putBoolean(MEDIA_SEARCH_SUPPORTED, false) //TODO: enable search
             putBoolean(CONTENT_STYLE_SUPPORTED, true)
@@ -243,19 +249,17 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentMediaId: String, result: Result<List<MediaItem>>) {
-        if(!isAuthenticated()){
+        if (!isAuthenticated()) {
             result.sendResult(null)
             return
         }
 
-        /**
-         * If the caller requests the recent root, return the most recently played song.
-         */
-        /*if (parentMediaId == UAMP_RECENT_ROOT) {
-            result.sendResult(storage.loadRecentSong()?.let { song -> listOf(song) })
-        } else {*/
+        Log.i(TAG, "onLoadChildren: $parentMediaId")
+
+        var resultsSent = false
+        if (parentMediaId == UAMP_PLAYLISTS_ROOT || parentMediaId == UAMP_BROWSABLE_ROOT) {
             // If the media source is ready, the results will be set synchronously here.
-            val resultsSent = mediaSource.whenReady { successfullyInitialized ->
+            resultsSent = mediaSource.whenReady { successfullyInitialized ->
                 if (successfullyInitialized) {
                     val children = browseTree[parentMediaId]?.map { item ->
                         MediaItem(item.description, item.flag)
@@ -266,22 +270,44 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     result.sendResult(null)
                 }
             }
-
-            // If the results are not ready, the service must "detach" the results before
-            // the method returns. After the source is ready, the lambda above will run,
-            // and the caller will be notified that the results are ready.
-            //
-            // See [MediaItemFragmentViewModel.subscriptionCallback] for how this is passed to the
-            // UI/displayed in the [RecyclerView].
-            if (!resultsSent) {
-                result.detach()
+        } else {
+            serviceScope.launch {
+                mediaSource.loadPlaylist(parentMediaId)
             }
-        //}
+            resultsSent = mediaSource.playlistWhenReady(parentMediaId) { successfullyInitialized ->
+                if (successfullyInitialized) {
+                    val children = mutableListOf<MediaItem>()
+                    mediaSource.playlistIterator(parentMediaId)?.forEach { item ->
+                        if (item !is Track) {
+                            return@forEach
+                        }
+                        children += MediaItem(
+                            MediaMetadataCompat.Builder().from(item, parentMediaId)
+                                .build().description, MediaItem.FLAG_PLAYABLE
+                        )
+                    }
+                    result.sendResult(children)
+                } else {
+                    mediaSession.sendSessionEvent(NETWORK_FAILURE, null)
+                    result.sendResult(null)
+                }
+            }
+        }
+
+        // If the results are not ready, the service must "detach" the results before
+        // the method returns. After the source is ready, the lambda above will run,
+        // and the caller will be notified that the results are ready.
+        //
+        // See [MediaItemFragmentViewModel.subscriptionCallback] for how this is passed to the
+        // UI/displayed in the [RecyclerView].
+        if (!resultsSent) {
+            result.detach()
+        }
     }
 
     private fun isAuthenticated(): Boolean {
         val accounts = accountManager.getAccountsByType(Authenticator.ACCOUNT_TYPE)
-        if(accounts.isEmpty()){
+        if (accounts.isEmpty()) {
             return false
         }
 
@@ -363,14 +389,24 @@ class MyMusicService : MediaBrowserServiceCompat() {
         // Since the playlist was probably based on some ordering (such as tracks
         // on an album), find which window index to play first so that the song the
         // user actually wants to hear plays first.
-        val initialWindowIndex = if (itemToPlay == null) 0 else metadataList.indexOf(itemToPlay)
+        val initialWindowIndex = if (itemToPlay == null) 0 else {
+            var idx = 0
+            for (i in metadataList.indices) {
+                if (metadataList[i].id == itemToPlay.id) {
+                    idx = i
+                    break
+                }
+            }
+            idx
+        }
         currentPlaylistItems = metadataList
 
         currentPlayer.playWhenReady = playWhenReady
         currentPlayer.stop()
         // Set playlist and prepare.
         currentPlayer.setMediaItems(
-            metadataList.map { it.toMediaItem() }, initialWindowIndex, playbackStartPositionMs)
+            metadataList.map { it.toMediaItem() }, initialWindowIndex, playbackStartPositionMs
+        )
         currentPlayer.prepare()
     }
 
@@ -414,34 +450,64 @@ class MyMusicService : MediaBrowserServiceCompat() {
             playWhenReady: Boolean,
             extras: Bundle?
         ) {
-            /*
-            mediaSource.whenReady {
-                val itemToPlay: MediaMetadataCompat? = mediaSource.find { item ->
-                    item.id == mediaId
+            Log.e(TAG, "onPrepareFromMediaId: $mediaId")
+            val idSplit = mediaId.split('/')
+            if (idSplit.size != 2) {
+                Log.e(TAG, "media id doesn't include parent id: $mediaId")
+                return
+            }
+
+            val playlistId = idSplit[0]
+            val mediaId = idSplit[1]
+
+            serviceScope.launch {
+                mediaSource.loadPlaylist(playlistId)
+            }
+
+            mediaSource.playlistWhenReady(playlistId) {
+                val currPlaylist = mediaSource.getPlaylistItems(playlistId)
+                if (currPlaylist == null) {
+                    Log.e(TAG, "Failed to load playlist: $playlistId")
+                    return@playlistWhenReady
+                }
+
+                val itemToPlay = currPlaylist.find { item ->
+                    if (item !is Track) {
+                        Log.w(TAG, "Skipping unknown playlist item: $item")
+                        return@find false
+                    }
+                    item.ratingKey.toString() == mediaId
                 }
                 if (itemToPlay == null) {
                     Log.w(TAG, "Content not found: MediaID=$mediaId")
                     // TODO: Notify caller of the error.
                 } else {
 
+
                     val playbackStartPositionMs =
-                        extras?.getLong(MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS, C.TIME_UNSET)
+                        extras?.getLong(
+                            MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS,
+                            C.TIME_UNSET
+                        )
                             ?: C.TIME_UNSET
 
                     preparePlaylist(
-                        buildPlaylist(itemToPlay),
-                        itemToPlay,
+                        buildPlaylist(currPlaylist, playlistId),
+                        MediaMetadataCompat.Builder().from(itemToPlay, playlistId).build(),
                         playWhenReady,
                         playbackStartPositionMs
                     )
                 }
             }
-             */
         }
 
-        override fun onPrepareFromSearch(query: String, playWhenReady: Boolean, extras: Bundle?) = Unit
+        override fun onPrepareFromSearch(query: String, playWhenReady: Boolean, extras: Bundle?) {
+            Log.e(TAG, "onPrepareFromSearch: $query")
+        }
 
-        override fun onPrepareFromUri(uri: Uri, playWhenReady: Boolean, extras: Bundle?) = Unit
+        override fun onPrepareFromUri(uri: Uri, playWhenReady: Boolean, extras: Bundle?) {
+            Log.e(TAG, "onPrepareFromUri: $uri")
+        }
 
         override fun onCommand(
             player: Player,
@@ -458,11 +524,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
          * @param item Item to base the playlist on.
          * @return a [List] of [MediaMetadataCompat] objects representing a playlist.
          */
-        private fun buildPlaylist(item: MediaMetadataCompat): List<MediaMetadataCompat> {
-            val plist = mediaSource.filter { it.ratingKey.toString() == item.id }.firstOrNull()
-                ?: return emptyList()
-
-            return plist.loadedItems().map { MediaMetadataCompat.Builder().from(it).build() }
+        private fun buildPlaylist(
+            playlist: Array<us.berkovitz.plexapi.media.MediaItem>,
+            playlistId: String
+        ): List<MediaMetadataCompat> {
+            return playlist.map { MediaMetadataCompat.Builder().from(it, playlistId).build() }
         }
     }
 
@@ -473,7 +539,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         override fun onEvents(player: Player, events: Player.Events) {
             if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)
                 || events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
-                || events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED)) {
+                || events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED)
+            ) {
                 currentMediaItemIndex = if (currentPlaylistItems.isNotEmpty()) {
                     Util.constrainValue(
                         player.currentMediaItemIndex,
@@ -488,7 +555,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             var message = "player error";
             Log.e(TAG, "Player error: " + error.errorCodeName + " (" + error.errorCode + ")");
             if (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
-                || error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND) {
+                || error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
+            ) {
                 message = "media not found";
             }
             Toast.makeText(
@@ -508,5 +576,7 @@ private const val CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_ST
 private const val CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
 private const val CONTENT_STYLE_LIST = 1
 private const val CONTENT_STYLE_GRID = 2
+
+const val MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS = "playback_start_position_ms"
 
 const val MEDIA_SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"

@@ -274,7 +274,7 @@ fun MediaMetadataCompat.toMediaItem(): com.google.android.exoplayer2.MediaItem {
     return with(com.google.android.exoplayer2.MediaItem.Builder()) {
         setMediaId(mediaUri.toString())
         setUri(mediaUri)
-        setMimeType(MimeTypes.AUDIO_MPEG)
+        //setMimeType(MimeTypes.AUDIO_MPEG)
         setMediaMetadata(toMediaItemMetadata())
     }.build()
 }

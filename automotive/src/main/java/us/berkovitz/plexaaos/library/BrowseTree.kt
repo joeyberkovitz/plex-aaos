@@ -21,6 +21,7 @@ import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
+import android.util.Log
 import us.berkovitz.plexaaos.R
 import us.berkovitz.plexaaos.extensions.*
 import us.berkovitz.plexapi.media.Playlist
@@ -81,7 +82,7 @@ class BrowseTree(
         musicSource.forEach { playlist ->
             val playlistId = playlist.ratingKey.toString()
             val playlistChildren = mediaIdToChildren[playlistId] ?: buildPlaylistRoot(playlist)
-            for(item in playlist.loadedItems()){
+            for (item in playlist.loadedItems()) {
                 playlistChildren += MediaMetadataCompat.Builder().from(item).build()
             }
         }
@@ -115,7 +116,7 @@ fun MediaMetadataCompat.Builder.from(playlist: Playlist): MediaMetadataCompat.Bu
     mediaUri = playlist.getServer()?.urlFor(playlist.key) ?: playlist.key
     flag = MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
     trackCount = playlist.leafCount.toLong()
-    if(playlist.duration > 0) {
+    if (playlist.duration > 0) {
         duration = playlist.duration.toLong()
     }
 
@@ -131,31 +132,44 @@ fun MediaMetadataCompat.Builder.from(playlist: Playlist): MediaMetadataCompat.Bu
     return this
 }
 
-fun MediaMetadataCompat.Builder.from(mediaItem: us.berkovitz.plexapi.media.MediaItem): MediaMetadataCompat.Builder {
-    if(mediaItem !is Track){
+fun MediaMetadataCompat.Builder.from(
+    mediaItem: us.berkovitz.plexapi.media.MediaItem,
+    playlistId: String? = null
+): MediaMetadataCompat.Builder {
+    if (mediaItem !is Track) {
         return this
     }
 
-    id = mediaItem.ratingKey.toString()
+    if (playlistId == null)
+        id = mediaItem.ratingKey.toString()
+    else
+        id = "${playlistId}/${mediaItem.ratingKey}"
     title = mediaItem.title
     mediaUri = mediaItem.getStreamUrl()
-    flag = MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
+    Log.d(TAG, "Media URI for ${mediaItem.ratingKey}: ${mediaItem.getStreamUrl()}")
+    flag = MediaItem.FLAG_PLAYABLE
     trackCount = 1
     duration = mediaItem.duration.toLong()
 
-    val iconUrl = if(!mediaItem.thumb.isNullOrEmpty()){
+    var iconUrl = if (!mediaItem.thumb.isNullOrEmpty()) {
         mediaItem.thumb
-    } else if(!mediaItem.parentThumb.isNullOrEmpty()) {
+    } else if (!mediaItem.parentThumb.isNullOrEmpty()) {
         mediaItem.parentThumb
-    } else {
+    } else if(!mediaItem.grandparentThumb.isNullOrEmpty()) {
         mediaItem.grandparentThumb
+    } else {
+        null
     }
 
-    mediaUri = iconUrl
+    if( iconUrl != null ) {
+        iconUrl = mediaItem._server!!.urlFor(iconUrl)
+    }
+
 
     // To make things easier for *displaying* these, set the display properties as well.
     displayIconUri = iconUrl
     displayTitle = mediaItem.title
+    displayDescription = mediaItem.title
 
     // Add downloadStatus to force the creation of an "extras" bundle in the resulting
     // MediaMetadataCompat object. This is needed to send accurate metadata to the
@@ -165,7 +179,7 @@ fun MediaMetadataCompat.Builder.from(mediaItem: us.berkovitz.plexapi.media.Media
     // Allow it to be used in the typical builder style.
     return this
 }
-
+private const val TAG = "BrowseTree"
 const val UAMP_BROWSABLE_ROOT = "/"
 const val UAMP_EMPTY_ROOT = "@empty@"
 const val UAMP_PLAYLISTS_ROOT = "__ALBUMS__"

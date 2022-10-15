@@ -1,15 +1,20 @@
 package us.berkovitz.plexaaos.library
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import us.berkovitz.plexapi.media.MediaItem
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.PlaylistType
 import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.MyPlexAccount
+import kotlin.coroutines.coroutineContext
+
+private const val TAG = "PlexSource"
 
 class PlexSource(private val plexToken: String): AbstractMusicSource() {
 
-    private var catalog: List<Playlist> = emptyList()
+    private var catalog: Map<String, Playlist> = hashMapOf()
     private val plexAccount = MyPlexAccount(plexToken)
     private var plexServer: PlexServer? = null
 
@@ -22,25 +27,68 @@ class PlexSource(private val plexToken: String): AbstractMusicSource() {
             catalog = updatedCatalog
             state = STATE_INITIALIZED
         } ?: run {
-            catalog = emptyList()
+            catalog = emptyMap()
             state = STATE_ERROR
         }    }
 
-    override fun iterator(): Iterator<Playlist> = catalog.iterator()
+    override suspend fun loadPlaylist(playlistId: String) {
+        loadPlaylistItems(playlistId).let { res ->
+            if (res) {
+                setPlaylistState(playlistId, STATE_INITIALIZED)
+            } else {
+                setPlaylistState(playlistId, STATE_ERROR)
+            }
+        }
+    }
 
-    private suspend fun updateCatalog(): List<Playlist> {
+    override fun iterator(): Iterator<Playlist> {
+        return catalog.values.iterator()
+    }
+
+    override fun playlistIterator(playlistId: String): Iterator<MediaItem>? {
+        return catalog[playlistId]?.loadedItems()?.iterator()
+    }
+
+    override fun getPlaylistItems(playlistId: String): Array<MediaItem>? {
+        return catalog[playlistId]?.loadedItems()
+    }
+
+    private suspend fun loadPlaylistItems(playlistId: String): Boolean {
+        return withContext(Dispatchers.IO){
+            if(catalog[playlistId] == null) {
+                Log.w(TAG, "Playlist $playlistId missing from catalog")
+                return@withContext false
+            }
+
+            try {
+                catalog[playlistId]?.items()
+                Log.i(TAG, "Playlist $playlistId loaded")
+            } catch (e: Exception){
+                Log.e(TAG, "Error loading $playlistId", e)
+                return@withContext false
+            }
+
+            return@withContext true
+        }
+    }
+
+    private suspend fun updateCatalog(): Map<String, Playlist> {
         return withContext(Dispatchers.IO){
             findServer()
             if(plexServer == null){
-                return@withContext listOf()
+                return@withContext hashMapOf()
             }
 
             val playlists = plexServer!!.playlists(PlaylistType.AUDIO)
-            for (playlist in playlists) {
+            val retMap = hashMapOf<String, Playlist>()
+            playlists.forEach {
+                retMap[it.ratingKey.toString()] = it
+            }
+            /*for (playlist in playlists) {
                 // make sure items are loaded here
                 playlist.items()
-            }
-            playlists.toList()
+            }*/
+            return@withContext retMap
         }
     }
 

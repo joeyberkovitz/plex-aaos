@@ -19,6 +19,7 @@ package us.berkovitz.plexaaos.library
 import android.os.Bundle
 import android.support.v4.media.MediaMetadataCompat
 import androidx.annotation.IntDef
+import us.berkovitz.plexapi.media.MediaItem
 import us.berkovitz.plexapi.media.Playlist
 
 /**
@@ -34,6 +35,12 @@ interface MusicSource : Iterable<Playlist> {
      */
     suspend fun load()
 
+    suspend fun loadPlaylist(playlistId: String)
+
+    fun playlistIterator(playlistId: String): Iterator<MediaItem>?
+
+    fun getPlaylistItems(playlistId: String): Array<MediaItem>?
+
     /**
      * Method which will perform a given action after this [MusicSource] is ready to be used.
      *
@@ -42,6 +49,8 @@ interface MusicSource : Iterable<Playlist> {
      * indicates an error occurred.
      */
     fun whenReady(performAction: (Boolean) -> Unit): Boolean
+
+    fun playlistWhenReady(playlistId: String, performAction: (Boolean) -> Unit): Boolean
 
     fun search(query: String, extras: Bundle): List<MediaMetadataCompat>
 }
@@ -94,6 +103,28 @@ abstract class AbstractMusicSource : MusicSource {
             }
         }
 
+
+    private val playlistState: MutableMap<String, Int> = hashMapOf()
+    private val playlistReadyListeners = mutableMapOf<String, MutableList<(Boolean) -> Unit>>()
+
+    fun getPlaylistState(playlistId: String): Int {
+        return playlistState[playlistId] ?: STATE_CREATED
+    }
+
+    fun setPlaylistState(playlistId: String, state: Int){
+        if (state == STATE_INITIALIZED || state == STATE_ERROR) {
+            synchronized(playlistReadyListeners) {
+                playlistState[playlistId] = state
+                playlistReadyListeners[playlistId]?.forEach { listener ->
+                    listener(state == STATE_INITIALIZED)
+                }
+                playlistReadyListeners.clear()
+            }
+        } else {
+            playlistState[playlistId] = state
+        }
+    }
+
     private val onReadyListeners = mutableListOf<(Boolean) -> Unit>()
 
     /**
@@ -113,6 +144,23 @@ abstract class AbstractMusicSource : MusicSource {
                 true
             }
         }
+
+    override fun playlistWhenReady(playlistId: String, performAction: (Boolean) -> Unit): Boolean =
+        when (playlistState[playlistId]) {
+            null, STATE_CREATED, STATE_INITIALIZING -> {
+                if(playlistReadyListeners[playlistId] == null){
+                    playlistReadyListeners[playlistId] = mutableListOf()
+                }
+
+                playlistReadyListeners[playlistId]!! += performAction
+                false
+            }
+            else -> {
+                performAction(state != STATE_ERROR)
+                true
+            }
+        }
+
 
     /**
      * Handles searching a [MusicSource] from a focused voice search, often coming

@@ -14,7 +14,7 @@ object AndroidPlexApi {
         Config.X_PLEX_PLATFORM_VERSION = Build.VERSION.RELEASE
         Config.X_PLEX_VERSION = BuildConfig.VERSION_NAME
         Config.X_PLEX_DEVICE = Build.MODEL
-        Config.X_PLEX_DEVICE_NAME = Settings.System.getString(ctx.contentResolver, "bluetooth_name")
+        Config.X_PLEX_DEVICE_NAME = Build.MODEL // TODO: get the user set device name
         if(clientId != null){
             Config.X_PLEX_IDENTIFIER = clientId
         }

@@ -170,6 +170,7 @@ fun MediaMetadataCompat.Builder.from(
 
     // To make things easier for *displaying* these, set the display properties as well.
     displayIconUri = iconUrl
+    albumArtUri = iconUrl
     displayTitle = mediaItem.title
     displayDescription = mediaItem.title
 

@@ -89,6 +89,7 @@ class MusicServiceConnection(context: Context, serviceComponent: ComponentName) 
         parameters: Bundle?,
         resultCallback: ((Int, Bundle?) -> Unit)
     ) = if (mediaBrowser.isConnected) {
+        //TODO: Can't create handler inside thread Thread[DefaultDispatcher-worker-8,5,main] that has not called Looper.prepare()
         mediaController.sendCommand(command, parameters, object : ResultReceiver(Handler()) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
                 resultCallback(resultCode, resultData)

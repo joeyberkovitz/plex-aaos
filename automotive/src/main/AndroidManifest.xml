@@ -48,5 +48,10 @@
             <meta-data android:name="android.accounts.AccountAuthenticator"
                 android:resource="@xml/authenticator" />
         </service>
+
+        <provider
+            android:name=".library.AlbumArtContentProvider"
+            android:authorities="us.berkovitz.plexaaos"
+            android:exported="true" />
     </application>
 </manifest>

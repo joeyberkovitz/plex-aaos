@@ -22,6 +22,7 @@ import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.audio.AudioAttributes
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector
+import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector.CustomActionProvider
 import com.google.android.exoplayer2.ext.mediasession.TimelineQueueNavigator
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
 import com.google.android.exoplayer2.util.Util
@@ -38,8 +39,6 @@ import us.berkovitz.plexaaos.library.PlexSource
 import us.berkovitz.plexaaos.library.UAMP_BROWSABLE_ROOT
 import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
 import us.berkovitz.plexaaos.library.from
-import us.berkovitz.plexapi.logging.Logger
-import us.berkovitz.plexapi.logging.LoggingFactory
 import us.berkovitz.plexapi.media.Track
 
 /**
@@ -141,6 +140,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             setAudioAttributes(playerAudioAttributes, true)
             setHandleAudioBecomingNoisy(true)
             addListener(playerListener)
+            repeatMode = Player.REPEAT_MODE_ALL
         }
     }
 
@@ -195,9 +195,52 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         // ExoPlayer will manage the MediaSession for us.
-        mediaSessionConnector = MediaSessionConnector(mediaSession)
-        mediaSessionConnector.setPlaybackPreparer(UampPlaybackPreparer())
-        mediaSessionConnector.setQueueNavigator(UampQueueNavigator(mediaSession))
+        mediaSessionConnector = MediaSessionConnector(mediaSession).apply {
+            setPlaybackPreparer(UampPlaybackPreparer())
+            setQueueNavigator(UampQueueNavigator(mediaSession))
+            setCustomActionProviders(
+                object: CustomActionProvider {
+                    override fun onCustomAction(player: Player, action: String, extras: Bundle?) {
+                        player.shuffleModeEnabled = !player.shuffleModeEnabled
+                    }
+
+                    override fun getCustomAction(player: Player): PlaybackStateCompat.CustomAction {
+                        val icon = if(player.shuffleModeEnabled) R.drawable.baseline_shuffle_on_24
+                                    else R.drawable.baseline_shuffle_24
+                        return PlaybackStateCompat.CustomAction.Builder(
+                            "shuffle",
+                            "Shuffle",
+                            icon
+                        ).build()
+                    }
+                },
+                object: CustomActionProvider {
+                    override fun onCustomAction(player: Player, action: String, extras: Bundle?) {
+                        player.repeatMode = when(player.repeatMode) {
+                            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                            Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_OFF
+                            else -> Player.REPEAT_MODE_OFF
+                        }
+                    }
+
+                    override fun getCustomAction(player: Player): PlaybackStateCompat.CustomAction {
+                        val icon = when(player.repeatMode){
+                            Player.REPEAT_MODE_OFF -> R.drawable.baseline_repeat_24
+                            Player.REPEAT_MODE_ALL -> R.drawable.baseline_repeat_on_24
+                            Player.REPEAT_MODE_ONE -> R.drawable.baseline_repeat_one_on_24
+                            else -> R.drawable.baseline_repeat_24
+                        }
+                        return PlaybackStateCompat.CustomAction.Builder(
+                            "repeat",
+                            "Repeat",
+                            icon
+                        ).build()
+                    }
+                }
+
+            )
+        }
 
         switchToPlayer(
             previousPlayer = null,

@@ -17,6 +17,7 @@
 package us.berkovitz.plexaaos.library
 
 import android.content.Context
+import android.net.Uri
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
@@ -163,6 +164,7 @@ fun MediaMetadataCompat.Builder.from(
 
     if( iconUrl != null ) {
         iconUrl = mediaItem._server!!.urlFor(iconUrl)
+        iconUrl = AlbumArtContentProvider.mapUri(Uri.parse(iconUrl)).toString()
     }
 
 
@@ -182,6 +184,6 @@ fun MediaMetadataCompat.Builder.from(
 private const val TAG = "BrowseTree"
 const val UAMP_BROWSABLE_ROOT = "/"
 const val UAMP_EMPTY_ROOT = "@empty@"
-const val UAMP_PLAYLISTS_ROOT = "__ALBUMS__"
+const val UAMP_PLAYLISTS_ROOT = "__PLAYLISTS__"
 
 const val RESOURCE_ROOT_URI = "android.resource://us.berkovitz.plexaaos/drawable/"

@@ -47,6 +47,7 @@ class LoginActivity : ComponentActivity() {
 
         accountManager = AccountManager.get(this)
 
+        AndroidPlexApi.initPlexApi(this)
         plexPinLogin.pinChangeCb = {
             text.value = it
         }
@@ -54,7 +55,8 @@ class LoginActivity : ComponentActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             val loginRes = plexPinLogin.pinLogin()
             if(loginRes.authToken != null){
-                setToken(loginRes.authToken!!)
+                val token = "${loginRes.clientIdentifier!!}|${loginRes.authToken!!}"
+                setToken(token)
             }
 
         }

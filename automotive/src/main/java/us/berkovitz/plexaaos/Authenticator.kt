@@ -14,6 +14,10 @@ class Authenticator(val context: Context): AbstractAccountAuthenticator(context)
         val AUTHTOKEN_TYPE = "us.berkovitz.plexaaos"
     }
 
+    init {
+        AndroidPlexApi.initPlexApi(context)
+    }
+
     override fun editProperties(p0: AccountAuthenticatorResponse?, p1: String?): Bundle {
         throw UnsupportedOperationException()
     }

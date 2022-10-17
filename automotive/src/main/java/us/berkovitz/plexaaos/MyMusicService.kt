@@ -94,11 +94,6 @@ const val LOGIN = "us.berkovitz.plexaaos.COMMAND.LOGIN"
 
 
 class MyMusicService : MediaBrowserServiceCompat() {
-
-    init {
-        LoggingFactory.setFactory(PlexLoggerFactory)
-    }
-
     companion object {
         const val TAG = "MyMusicService"
     }
@@ -166,7 +161,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     override fun onCreate() {
         super.onCreate()
-
+        AndroidPlexApi.initPlexApi(this)
         accountManager = AccountManager.get(this)
 
         // Build a PendingIntent that can be used to launch the UI.
@@ -187,6 +182,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         sessionToken = mediaSession.sessionToken
 
         if (!isAuthenticated()) {
+            Log.i(TAG, "Not logged in")
             requireLogin()
             return
         }
@@ -311,7 +307,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return false
         }
 
-        plexToken = accountManager.getPassword(accounts[0])
+        val token = accountManager.getPassword(accounts[0]).split('|')
+        plexToken = token[1]
+        AndroidPlexApi.initPlexApi(this, token[0])
 
         return true
     }

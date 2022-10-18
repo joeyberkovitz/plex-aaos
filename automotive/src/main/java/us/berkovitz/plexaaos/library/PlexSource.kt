@@ -12,9 +12,9 @@ import kotlin.coroutines.coroutineContext
 
 private const val TAG = "PlexSource"
 
-class PlexSource(private val plexToken: String): AbstractMusicSource() {
+class PlexSource(private val plexToken: String) : AbstractMusicSource() {
 
-    private var catalog: Map<String, Playlist> = hashMapOf()
+    private var catalog: MutableMap<String, Playlist> = hashMapOf()
     private val plexAccount = MyPlexAccount(plexToken)
     private var plexServer: PlexServer? = null
 
@@ -27,22 +27,29 @@ class PlexSource(private val plexToken: String): AbstractMusicSource() {
             catalog = updatedCatalog
             state = STATE_INITIALIZED
         } ?: run {
-            catalog = emptyMap()
+            catalog = hashMapOf()
             state = STATE_ERROR
-        }    }
+        }
+    }
 
-    override suspend fun loadPlaylist(playlistId: String) {
-        loadPlaylistItems(playlistId).let { res ->
-            if (res) {
-                setPlaylistState(playlistId, STATE_INITIALIZED)
+    override suspend fun loadPlaylist(playlistId: String): Playlist? {
+        val plist = loadPlaylistItems(playlistId)
+        plist.let{ res ->
+            if (res != null) {
+                setPlaylistState(playlistId, res, STATE_INITIALIZED)
             } else {
-                setPlaylistState(playlistId, STATE_ERROR)
+                setPlaylistState(playlistId, null, STATE_ERROR)
             }
         }
+        return plist
     }
 
     override fun iterator(): Iterator<Playlist> {
         return catalog.values.iterator()
+    }
+
+    override fun getPlaylist(playlistId: String): Playlist? {
+        return catalog[playlistId]
     }
 
     override fun playlistIterator(playlistId: String): Iterator<MediaItem>? {
@@ -53,29 +60,44 @@ class PlexSource(private val plexToken: String): AbstractMusicSource() {
         return catalog[playlistId]?.loadedItems()
     }
 
-    private suspend fun loadPlaylistItems(playlistId: String): Boolean {
-        return withContext(Dispatchers.IO){
-            if(catalog[playlistId] == null) {
+    private suspend fun loadPlaylistItems(playlistId: String): Playlist? {
+        return withContext(Dispatchers.IO) {
+            var playlist = catalog[playlistId]
+            if (playlist == null) {
                 Log.w(TAG, "Playlist $playlistId missing from catalog")
-                return@withContext false
+                if (plexServer == null) {
+                    findServer()
+                }
+                val playlistIdInt = playlistId.toIntOrNull()
+                if (playlistIdInt == null) {
+                    Log.w(TAG, "Invalid playlist id: $playlistId")
+                    return@withContext null
+                }
+
+                playlist = Playlist.fromId(playlistId.toInt(), plexServer!!)
+                if (playlist == null) {
+                    Log.w(TAG, "Failed to find playlist: $playlistId")
+                    return@withContext null
+                }
+                playlist.setServer(plexServer!!)
+                catalog[playlistId] = playlist
             }
 
             try {
-                catalog[playlistId]?.items()
+                playlist.items()
                 Log.i(TAG, "Playlist $playlistId loaded")
-            } catch (e: Exception){
+            } catch (e: Exception) {
                 Log.e(TAG, "Error loading $playlistId", e)
-                return@withContext false
+                return@withContext null
             }
-
-            return@withContext true
+            return@withContext playlist
         }
     }
 
-    private suspend fun updateCatalog(): Map<String, Playlist> {
-        return withContext(Dispatchers.IO){
+    private suspend fun updateCatalog(): MutableMap<String, Playlist> {
+        return withContext(Dispatchers.IO) {
             findServer()
-            if(plexServer == null){
+            if (plexServer == null) {
                 return@withContext hashMapOf()
             }
 
@@ -92,12 +114,15 @@ class PlexSource(private val plexToken: String): AbstractMusicSource() {
         }
     }
 
-    private suspend fun findServer(){
+    private suspend fun findServer() {
+        if(plexServer != null)
+            return
+
         val servers = plexAccount.resources()
-        for(server in servers){
+        for (server in servers) {
             var hasRemote = false
             var connUrl = ""
-            if(server.connections != null) {
+            if (server.connections != null) {
                 for (conn in server.connections!!) {
                     if (conn.local == 0) {
                         hasRemote = true

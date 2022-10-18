@@ -12,6 +12,14 @@ repositories {
 
 
 android {
+    signingConfigs {
+        release {
+            storeFile file('/home/joey/Documents/dev_store.jks')
+            storePassword 'password'
+            keyAlias 'key0'
+            keyPassword 'password'
+        }
+    }
     namespace 'us.berkovitz.plexaaos.shared'
     compileSdkVersion 33
 
@@ -20,6 +28,7 @@ android {
         targetSdkVersion 33
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        signingConfig signingConfigs.release
     }
 }
 

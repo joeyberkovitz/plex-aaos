@@ -122,16 +122,18 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
         for (server in servers) {
             var hasRemote = false
             var connUrl = ""
+            var overrideToken: String? = null
             if (server.connections != null) {
                 for (conn in server.connections!!) {
                     if (conn.local == 0) {
                         hasRemote = true
                         connUrl = conn.uri
+                        overrideToken = server.accessToken
                         break
                     }
                 }
                 if (hasRemote) {
-                    plexServer = PlexServer(connUrl, plexToken)
+                    plexServer = PlexServer(connUrl, overrideToken ?: plexToken)
                     break
                 }
             }

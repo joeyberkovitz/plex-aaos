@@ -19,6 +19,20 @@ repositories {
 }
 
 android {
+    signingConfigs {
+        debug {
+            storeFile file('/home/joey/Documents/dev_store.jks')
+            storePassword 'password'
+            keyAlias 'key0'
+            keyPassword 'password'
+        }
+        release {
+            storeFile file('/home/joey/Documents/dev_store.jks')
+            storePassword 'password'
+            keyAlias 'key0'
+            keyPassword 'password'
+        }
+    }
     namespace 'us.berkovitz.plexaaos'
     compileSdk 33
 
@@ -33,6 +47,7 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+        signingConfig signingConfigs.release
     }
 
     buildTypes {
@@ -87,4 +102,5 @@ dependencies {
 
     // Glide dependencies
     api "com.github.bumptech.glide:glide:$glide_version"
+    annotationProcessor "com.github.bumptech.glide:compiler:$glide_version"
 }

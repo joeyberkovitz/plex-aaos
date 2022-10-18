@@ -35,8 +35,9 @@ interface MusicSource : Iterable<Playlist> {
      */
     suspend fun load()
 
-    suspend fun loadPlaylist(playlistId: String)
+    suspend fun loadPlaylist(playlistId: String): Playlist?
 
+    fun getPlaylist(playlistId: String): Playlist?
     fun playlistIterator(playlistId: String): Iterator<MediaItem>?
 
     fun getPlaylistItems(playlistId: String): Array<MediaItem>?
@@ -50,7 +51,7 @@ interface MusicSource : Iterable<Playlist> {
      */
     fun whenReady(performAction: (Boolean) -> Unit): Boolean
 
-    fun playlistWhenReady(playlistId: String, performAction: (Boolean) -> Unit): Boolean
+    fun playlistWhenReady(playlistId: String, performAction: (Playlist?) -> Unit): Boolean
 
     fun search(query: String, extras: Bundle): List<MediaMetadataCompat>
 }
@@ -97,6 +98,7 @@ abstract class AbstractMusicSource : MusicSource {
                     onReadyListeners.forEach { listener ->
                         listener(state == STATE_INITIALIZED)
                     }
+                    onReadyListeners.clear()
                 }
             } else {
                 field = value
@@ -105,18 +107,18 @@ abstract class AbstractMusicSource : MusicSource {
 
 
     private val playlistState: MutableMap<String, Int> = hashMapOf()
-    private val playlistReadyListeners = mutableMapOf<String, MutableList<(Boolean) -> Unit>>()
+    private val playlistReadyListeners = mutableMapOf<String, MutableList<(Playlist?) -> Unit>>()
 
     fun getPlaylistState(playlistId: String): Int {
         return playlistState[playlistId] ?: STATE_CREATED
     }
 
-    fun setPlaylistState(playlistId: String, state: Int){
+    fun setPlaylistState(playlistId: String, playlist: Playlist?, state: Int){
         if (state == STATE_INITIALIZED || state == STATE_ERROR) {
             synchronized(playlistReadyListeners) {
                 playlistState[playlistId] = state
                 playlistReadyListeners[playlistId]?.forEach { listener ->
-                    listener(state == STATE_INITIALIZED)
+                    listener(playlist)
                 }
                 playlistReadyListeners.clear()
             }
@@ -145,7 +147,7 @@ abstract class AbstractMusicSource : MusicSource {
             }
         }
 
-    override fun playlistWhenReady(playlistId: String, performAction: (Boolean) -> Unit): Boolean =
+    override fun playlistWhenReady(playlistId: String, performAction: (Playlist?) -> Unit): Boolean =
         when (playlistState[playlistId]) {
             null, STATE_CREATED, STATE_INITIALIZING -> {
                 if(playlistReadyListeners[playlistId] == null){
@@ -156,7 +158,7 @@ abstract class AbstractMusicSource : MusicSource {
                 false
             }
             else -> {
-                performAction(state != STATE_ERROR)
+                performAction(getPlaylist(playlistId))
                 true
             }
         }

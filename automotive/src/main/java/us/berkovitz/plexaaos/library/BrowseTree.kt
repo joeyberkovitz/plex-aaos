@@ -53,7 +53,7 @@ import us.berkovitz.plexapi.media.Track
  */
 class BrowseTree(
     val context: Context,
-    musicSource: MusicSource,
+    val musicSource: MusicSource,
     val recentMediaId: String? = null
 ) {
     private val mediaIdToChildren = mutableMapOf<String, MutableList<MediaMetadataCompat>>()
@@ -79,7 +79,10 @@ class BrowseTree(
 
         rootList += playlistsMetadata
         mediaIdToChildren[UAMP_BROWSABLE_ROOT] = rootList
+        refresh()
+    }
 
+    fun refresh(){
         musicSource.forEach { playlist ->
             val playlistId = playlist.ratingKey.toString()
             val playlistChildren = mediaIdToChildren[playlistId] ?: buildPlaylistRoot(playlist)
@@ -147,7 +150,6 @@ fun MediaMetadataCompat.Builder.from(
         id = "${playlistId}/${mediaItem.ratingKey}"
     title = mediaItem.title
     mediaUri = mediaItem.getStreamUrl()
-    Log.d(TAG, "Media URI for ${mediaItem.ratingKey}: ${mediaItem.getStreamUrl()}")
     flag = MediaItem.FLAG_PLAYABLE
     trackCount = 1
     duration = mediaItem.duration.toLong()

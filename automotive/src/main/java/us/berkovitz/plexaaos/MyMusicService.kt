@@ -199,14 +199,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
             setPlaybackPreparer(UampPlaybackPreparer())
             setQueueNavigator(UampQueueNavigator(mediaSession))
             setCustomActionProviders(
-                object: CustomActionProvider {
+                object : CustomActionProvider {
                     override fun onCustomAction(player: Player, action: String, extras: Bundle?) {
                         player.shuffleModeEnabled = !player.shuffleModeEnabled
                     }
 
                     override fun getCustomAction(player: Player): PlaybackStateCompat.CustomAction {
-                        val icon = if(player.shuffleModeEnabled) R.drawable.baseline_shuffle_on_24
-                                    else R.drawable.baseline_shuffle_24
+                        val icon = if (player.shuffleModeEnabled) R.drawable.baseline_shuffle_on_24
+                        else R.drawable.baseline_shuffle_24
                         return PlaybackStateCompat.CustomAction.Builder(
                             "shuffle",
                             "Shuffle",
@@ -214,9 +214,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         ).build()
                     }
                 },
-                object: CustomActionProvider {
+                object : CustomActionProvider {
                     override fun onCustomAction(player: Player, action: String, extras: Bundle?) {
-                        player.repeatMode = when(player.repeatMode) {
+                        player.repeatMode = when (player.repeatMode) {
                             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                             Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_OFF
@@ -225,7 +225,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     }
 
                     override fun getCustomAction(player: Player): PlaybackStateCompat.CustomAction {
-                        val icon = when(player.repeatMode){
+                        val icon = when (player.repeatMode) {
                             Player.REPEAT_MODE_OFF -> R.drawable.baseline_repeat_24
                             Player.REPEAT_MODE_ALL -> R.drawable.baseline_repeat_on_24
                             Player.REPEAT_MODE_ONE -> R.drawable.baseline_repeat_one_on_24
@@ -297,14 +297,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         var resultsSent = false
         if (parentMediaId == UAMP_PLAYLISTS_ROOT || parentMediaId == UAMP_BROWSABLE_ROOT) {
+            if (parentMediaId == UAMP_BROWSABLE_ROOT) {
+                serviceScope.launch {
+                    mediaSource.load()
+                }
+            }
             // If the media source is ready, the results will be set synchronously here.
             resultsSent = mediaSource.whenReady { successfullyInitialized ->
                 if (successfullyInitialized) {
+                    browseTree.refresh()
                     val children = browseTree[parentMediaId]?.map { item ->
                         MediaItem(item.description, item.flag)
-                    }
+                    } ?: listOf()
+                    Log.i(TAG, "Sending ${children.size} results for $parentMediaId")
                     result.sendResult(children)
                 } else {
+                    Log.e(TAG, "Failed to load results for $parentMediaId")
                     mediaSession.sendSessionEvent(NETWORK_FAILURE, null)
                     result.sendResult(null)
                 }
@@ -313,10 +321,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
             serviceScope.launch {
                 mediaSource.loadPlaylist(parentMediaId)
             }
-            resultsSent = mediaSource.playlistWhenReady(parentMediaId) { successfullyInitialized ->
-                if (successfullyInitialized) {
+            resultsSent = mediaSource.playlistWhenReady(parentMediaId) { plist ->
+                if (plist != null) {
                     val children = mutableListOf<MediaItem>()
-                    mediaSource.playlistIterator(parentMediaId)?.forEach { item ->
+                    plist.loadedItems().forEach { item ->
                         if (item !is Track) {
                             return@forEach
                         }
@@ -487,14 +495,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         override fun onPrepare(playWhenReady: Boolean) = Unit
 
         override fun onPrepareFromMediaId(
-            mediaId: String,
+            prepareId: String,
             playWhenReady: Boolean,
             extras: Bundle?
         ) {
-            Log.e(TAG, "onPrepareFromMediaId: $mediaId")
-            val idSplit = mediaId.split('/')
+            Log.e(TAG, "onPrepareFromMediaId: $prepareId")
+            val idSplit = prepareId.split('/')
             if (idSplit.size != 2) {
-                Log.e(TAG, "media id doesn't include parent id: $mediaId")
+                Log.e(TAG, "media id doesn't include parent id: $prepareId")
                 return
             }
 
@@ -502,14 +510,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val mediaId = idSplit[1]
 
             serviceScope.launch {
-                mediaSource.loadPlaylist(playlistId)
-            }
-
-            mediaSource.playlistWhenReady(playlistId) {
-                val currPlaylist = mediaSource.getPlaylistItems(playlistId)
+                val plist = mediaSource.loadPlaylist(playlistId)
+                val currPlaylist = plist?.items()
                 if (currPlaylist == null) {
                     Log.e(TAG, "Failed to load playlist: $playlistId")
-                    return@playlistWhenReady
+                    return@launch
                 }
 
                 val itemToPlay = currPlaylist.find { item ->
@@ -523,8 +528,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     Log.w(TAG, "Content not found: MediaID=$mediaId")
                     // TODO: Notify caller of the error.
                 } else {
-
-
                     val playbackStartPositionMs =
                         extras?.getLong(
                             MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS,

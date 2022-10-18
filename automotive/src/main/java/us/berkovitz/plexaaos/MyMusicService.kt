@@ -485,14 +485,23 @@ class MyMusicService : MediaBrowserServiceCompat() {
         /**
          * UAMP supports preparing (and playing) from search, as well as media ID, so those
          * capabilities are declared here.
-         *
-         * TODO: Add support for ACTION_PREPARE and ACTION_PLAY, which mean "prepare/play something".
          */
-        override fun getSupportedPrepareActions(): Long =
-            PlaybackStateCompat.ACTION_PREPARE_FROM_MEDIA_ID or
-                    PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID
+        override fun getSupportedPrepareActions(): Long = PlaybackStateCompat.ACTION_PREPARE or
+                PlaybackStateCompat.ACTION_PLAY or
+                PlaybackStateCompat.ACTION_PREPARE_FROM_MEDIA_ID or
+                PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID
 
-        override fun onPrepare(playWhenReady: Boolean) = Unit
+        override fun onPrepare(playWhenReady: Boolean) {
+            Log.d(TAG, "onPrepare")
+            serviceScope.launch {
+                val lastSong = AndroidStorage.getLastSong(applicationContext)
+                if(lastSong == null){
+                    Log.w(TAG, "Last song not found")
+                    return@launch
+                }
+                onPrepareFromMediaId(lastSong, playWhenReady, null)
+            }
+        }
 
         override fun onPrepareFromMediaId(
             prepareId: String,
@@ -592,6 +601,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         /* max = */ currentPlaylistItems.size - 1
                     )
                 } else 0
+                if(currentPlaylistItems.isNotEmpty()){
+                    val id = currentPlaylistItems[currentMediaItemIndex].id
+                    if(id != null) {
+                        serviceScope.launch {
+                            AndroidStorage.setLastSong(id, applicationContext)
+                        }
+                    }
+                }
+
             }
         }
 

@@ -40,8 +40,8 @@ android {
         applicationId "us.berkovitz.plexaaos"
         minSdk 28
         targetSdk 33
-        versionCode 5
-        versionName "0.3.1"
+        versionCode 6
+        versionName "0.3.2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

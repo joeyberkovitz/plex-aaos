@@ -38,10 +38,10 @@ android {
 
     defaultConfig {
         applicationId "us.berkovitz.plexaaos"
-        minSdk 28
+        minSdk 29
         targetSdk 33
-        versionCode 6
-        versionName "0.3.2"
+        versionCode 8
+        versionName "0.3.3"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

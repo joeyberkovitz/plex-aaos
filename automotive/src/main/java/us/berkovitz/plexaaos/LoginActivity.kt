@@ -8,14 +8,23 @@ import android.content.ComponentName
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,6 +74,8 @@ class LoginActivity : ComponentActivity() {
             PlexAAOSTheme {
                 Column(
                     modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     EnterPin(text)
                 }
@@ -99,11 +110,15 @@ class LoginActivity : ComponentActivity() {
 
 @Composable
 fun EnterPin(pin: MutableState<String>) {
-    if(pin.value.isBlank()){
-        Text(text = "Loading ...")
-    } else {
-        Text(text = "Enter pin at https://plex.tv/link: ${pin.value}")
+    var text = "Loading ..."
+    if(!pin.value.isBlank()) {
+        text = "Enter pin at https://plex.tv/link: ${pin.value}"
     }
+    Text(text = text,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+        fontSize = 30.sp
+    )
 }
 
 @SuppressLint("UnrememberedMutableState")

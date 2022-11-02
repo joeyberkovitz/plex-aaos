@@ -30,7 +30,8 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PlexAAOS">
 
         <meta-data
             android:name="com.android.automotive"
@@ -39,7 +40,8 @@
         <activity
             android:name=".LoginActivity"
             android:exported="true"
-            android:label="@string/title_activity_login">
+            android:label="@string/title_activity_login"
+            android:theme="@style/Theme.PlexAAOS">
             <intent-filter>
                 <action android:name="android.intent.action.ACTION_SIGN_IN" />
             </intent-filter>

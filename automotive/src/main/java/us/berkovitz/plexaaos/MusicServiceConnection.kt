@@ -21,6 +21,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.os.ResultReceiver
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaMetadataCompat
@@ -90,7 +91,7 @@ class MusicServiceConnection(context: Context, serviceComponent: ComponentName) 
         resultCallback: ((Int, Bundle?) -> Unit)
     ) = if (mediaBrowser.isConnected) {
         //TODO: Can't create handler inside thread Thread[DefaultDispatcher-worker-8,5,main] that has not called Looper.prepare()
-        mediaController.sendCommand(command, parameters, object : ResultReceiver(Handler()) {
+        mediaController.sendCommand(command, parameters, object : ResultReceiver(Handler(Looper.getMainLooper())) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
                 resultCallback(resultCode, resultData)
             }

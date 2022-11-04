@@ -186,7 +186,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
             requireLogin()
             return
         }
+        checkInit()
+    }
 
+    fun checkInit() {
+        if (this::mediaSource.isInitialized) {
+            return
+        }
         // The media library is built from a remote JSON file. We'll create the source here,
         // and then use a suspend function to perform the download off the main thread.
         mediaSource = PlexSource(plexToken!!)
@@ -292,6 +298,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             result.sendResult(null)
             return
         }
+        checkInit()
 
         Log.i(TAG, "onLoadChildren: $parentMediaId")
 
@@ -359,6 +366,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         val token = accountManager.getPassword(accounts[0]).split('|')
+        if (token.size != 2) {
+            accountManager.removeAccountExplicitly(accounts[0])
+            return false
+        }
         plexToken = token[1]
         AndroidPlexApi.initPlexApi(this, token[0])
 
@@ -492,10 +503,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID
 
         override fun onPrepare(playWhenReady: Boolean) {
+            if (!isAuthenticated()) {
+                Log.i(TAG, "Not logged in")
+                requireLogin()
+                return
+            }
             Log.d(TAG, "onPrepare")
             serviceScope.launch {
                 val lastSong = AndroidStorage.getLastSong(applicationContext)
-                if(lastSong == null){
+                if (lastSong == null) {
                     Log.w(TAG, "Last song not found")
                     return@launch
                 }
@@ -601,9 +617,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         /* max = */ currentPlaylistItems.size - 1
                     )
                 } else 0
-                if(currentPlaylistItems.isNotEmpty()){
+                if (currentPlaylistItems.isNotEmpty()) {
                     val id = currentPlaylistItems[currentMediaItemIndex].id
-                    if(id != null) {
+                    if (id != null) {
                         serviceScope.launch {
                             AndroidStorage.setLastSong(id, applicationContext)
                         }

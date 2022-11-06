@@ -70,13 +70,13 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
                 if (plexServer == null) {
                     findServer()
                 }
-                val playlistIdInt = playlistId.toIntOrNull()
-                if (playlistIdInt == null) {
+                val playlistIdLong = playlistId.toLongOrNull()
+                if (playlistIdLong == null) {
                     logger.warn( "Invalid playlist id: $playlistId")
                     return@withContext null
                 }
 
-                playlist = Playlist.fromId(playlistId.toInt(), plexServer!!)
+                playlist = Playlist.fromId(playlistId.toLong(), plexServer!!)
                 if (playlist == null) {
                     logger.warn( "Failed to find playlist: $playlistId")
                     return@withContext null

@@ -18,15 +18,12 @@ package us.berkovitz.plexaaos.library
 
 import android.content.Context
 import android.net.Uri
-import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
-import android.util.Log
 import us.berkovitz.plexaaos.R
 import us.berkovitz.plexaaos.extensions.*
 import us.berkovitz.plexapi.media.Playlist
-import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.media.Track
 
 /**
@@ -118,10 +115,10 @@ fun MediaMetadataCompat.Builder.from(playlist: Playlist): MediaMetadataCompat.Bu
     id = playlist.ratingKey.toString()
     title = playlist.title
     mediaUri = playlist.getServer()?.urlFor(playlist.key) ?: playlist.key
-    flag = MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
-    trackCount = playlist.leafCount.toLong()
+    flag = MediaItem.FLAG_BROWSABLE
+    trackCount = playlist.leafCount
     if (playlist.duration > 0) {
-        duration = playlist.duration.toLong()
+        duration = playlist.duration
     }
 
     // To make things easier for *displaying* these, set the display properties as well.
@@ -152,7 +149,7 @@ fun MediaMetadataCompat.Builder.from(
     mediaUri = mediaItem.getStreamUrl()
     flag = MediaItem.FLAG_PLAYABLE
     trackCount = 1
-    duration = mediaItem.duration.toLong()
+    duration = mediaItem.duration
 
     var iconUrl = if (!mediaItem.thumb.isNullOrEmpty()) {
         mediaItem.thumb

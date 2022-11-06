@@ -121,19 +121,24 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
         val servers = plexAccount.resources()
         for (server in servers) {
             var hasRemote = false
-            var connUrl = ""
-            var overrideToken: String? = null
             if (server.connections != null) {
                 for (conn in server.connections!!) {
                     if (conn.local == 0) {
-                        hasRemote = true
-                        connUrl = conn.uri
-                        overrideToken = server.accessToken
-                        break
+                        val connUrl = conn.uri
+                        val overrideToken = server.accessToken
+                        val potentialServer = PlexServer(connUrl, overrideToken ?: plexToken)
+                        Log.d(TAG, "Trying server: ${connUrl}")
+                        if(potentialServer.testConnection()){
+                            Log.d(TAG, "Connection succeeded")
+                            hasRemote = true
+                            plexServer = potentialServer
+                            break
+                        } else {
+                            Log.d(TAG, "Connection failed")
+                        }
                     }
                 }
                 if (hasRemote) {
-                    plexServer = PlexServer(connUrl, overrideToken ?: plexToken)
                     break
                 }
             }

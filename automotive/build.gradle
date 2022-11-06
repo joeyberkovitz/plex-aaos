@@ -4,6 +4,7 @@ plugins {
 }
 
 repositories {
+    mavenLocal()
     maven {
         url = uri("https://maven.pkg.github.com/joeyberkovitz/kotlin-plexapi")
         credentials {
@@ -14,7 +15,6 @@ repositories {
         }
     }
     google()
-    mavenLocal()
     mavenCentral()
 }
 
@@ -40,8 +40,8 @@ android {
         applicationId "us.berkovitz.plexaaos"
         minSdk 29
         targetSdk 33
-        versionCode 10
-        versionName "0.3.5"
+        versionCode 11
+        versionName "0.3.7"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -84,6 +84,8 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.5.1'
     implementation 'androidx.activity:activity-compose:1.6.1'
     implementation "androidx.compose.ui:ui:$compose_ui_version"
+    implementation 'androidx.preference:preference:1.2.0'
+    implementation 'com.google.android.material:material:1.4.0'
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_ui_version"
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_ui_version"
     implementation "androidx.compose.material:material:$compose_ui_version"
@@ -95,7 +97,7 @@ dependencies {
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_ui_version"
 
     implementation 'androidx.media:media:1.6.0'
-    implementation 'us.berkovitz:kotlin-plexapi:0.1.6'
+    implementation 'us.berkovitz:kotlin-plexapi:0.1.8'
 
     api "com.google.android.exoplayer:exoplayer-core:$exoplayer_version"
     api "com.google.android.exoplayer:exoplayer-ui:$exoplayer_version"

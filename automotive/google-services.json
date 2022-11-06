@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "756063507819",
+    "project_id": "plex-aaos",
+    "storage_bucket": "plex-aaos.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:756063507819:android:a595e86b9762463646e82e",
+        "android_client_info": {
+          "package_name": "us.berkovitz.plexaaos"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "756063507819-4e781e73ilbtpemcpbt8mpu0j1jv2cd4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxjv1mPgAB-EBQSiTuq1cs_RXswRNj_GQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "756063507819-4e781e73ilbtpemcpbt8mpu0j1jv2cd4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

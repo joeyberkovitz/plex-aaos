@@ -3,6 +3,7 @@ package us.berkovitz.plexaaos.library
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import us.berkovitz.plexaaos.PlexLoggerFactory
 import us.berkovitz.plexapi.media.MediaItem
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.PlaylistType
@@ -10,9 +11,10 @@ import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.MyPlexAccount
 import kotlin.coroutines.coroutineContext
 
-private const val TAG = "PlexSource"
-
 class PlexSource(private val plexToken: String) : AbstractMusicSource() {
+    companion object {
+        val logger = PlexLoggerFactory.loggerFor(PlexSource::class)
+    }
 
     private var catalog: MutableMap<String, Playlist> = hashMapOf()
     private val plexAccount = MyPlexAccount(plexToken)
@@ -64,19 +66,19 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
         return withContext(Dispatchers.IO) {
             var playlist = catalog[playlistId]
             if (playlist == null) {
-                Log.w(TAG, "Playlist $playlistId missing from catalog")
+                logger.warn( "Playlist $playlistId missing from catalog")
                 if (plexServer == null) {
                     findServer()
                 }
                 val playlistIdInt = playlistId.toIntOrNull()
                 if (playlistIdInt == null) {
-                    Log.w(TAG, "Invalid playlist id: $playlistId")
+                    logger.warn( "Invalid playlist id: $playlistId")
                     return@withContext null
                 }
 
                 playlist = Playlist.fromId(playlistId.toInt(), plexServer!!)
                 if (playlist == null) {
-                    Log.w(TAG, "Failed to find playlist: $playlistId")
+                    logger.warn( "Failed to find playlist: $playlistId")
                     return@withContext null
                 }
                 playlist.setServer(plexServer!!)
@@ -85,9 +87,9 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
 
             try {
                 playlist.items()
-                Log.i(TAG, "Playlist $playlistId loaded")
+                logger.info( "Playlist $playlistId loaded")
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading $playlistId", e)
+                logger.error( "Error loading $playlistId: ${e.message}, ${e.printStackTrace()}")
                 return@withContext null
             }
             return@withContext playlist
@@ -127,14 +129,14 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
                         val connUrl = conn.uri
                         val overrideToken = server.accessToken
                         val potentialServer = PlexServer(connUrl, overrideToken ?: plexToken)
-                        Log.d(TAG, "Trying server: ${connUrl}")
+                        logger.debug( "Trying server: ${connUrl}")
                         if(potentialServer.testConnection()){
-                            Log.d(TAG, "Connection succeeded")
+                            logger.debug( "Connection succeeded")
                             hasRemote = true
                             plexServer = potentialServer
                             break
                         } else {
-                            Log.d(TAG, "Connection failed")
+                            logger.debug( "Connection failed")
                         }
                     }
                 }

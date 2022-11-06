@@ -94,7 +94,7 @@ const val LOGIN = "us.berkovitz.plexaaos.COMMAND.LOGIN"
 
 class MyMusicService : MediaBrowserServiceCompat() {
     companion object {
-        const val TAG = "MyMusicService"
+        val logger = PlexLoggerFactory.loggerFor(MyMusicService::class)
     }
 
     private lateinit var accountManager: AccountManager
@@ -182,7 +182,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         sessionToken = mediaSession.sessionToken
 
         if (!isAuthenticated()) {
-            Log.i(TAG, "Not logged in")
+            logger.info("Not logged in")
             requireLogin()
             return
         }
@@ -300,7 +300,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         checkInit()
 
-        Log.i(TAG, "onLoadChildren: $parentMediaId")
+        logger.info( "onLoadChildren: $parentMediaId")
 
         var resultsSent = false
         if (parentMediaId == UAMP_PLAYLISTS_ROOT || parentMediaId == UAMP_BROWSABLE_ROOT) {
@@ -316,10 +316,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     val children = browseTree[parentMediaId]?.map { item ->
                         MediaItem(item.description, item.flag)
                     } ?: listOf()
-                    Log.i(TAG, "Sending ${children.size} results for $parentMediaId")
+                    logger.info("Sending ${children.size} results for $parentMediaId")
                     result.sendResult(children)
                 } else {
-                    Log.e(TAG, "Failed to load results for $parentMediaId")
+                    logger.info("Failed to load results for $parentMediaId")
                     mediaSession.sendSessionEvent(NETWORK_FAILURE, null)
                     result.sendResult(null)
                 }
@@ -504,15 +504,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onPrepare(playWhenReady: Boolean) {
             if (!isAuthenticated()) {
-                Log.i(TAG, "Not logged in")
+                logger.info("Not logged in")
                 requireLogin()
                 return
             }
-            Log.d(TAG, "onPrepare")
+            logger.debug("onPrepare")
             serviceScope.launch {
                 val lastSong = AndroidStorage.getLastSong(applicationContext)
                 if (lastSong == null) {
-                    Log.w(TAG, "Last song not found")
+                    logger.warn("Last song not found")
                     return@launch
                 }
                 onPrepareFromMediaId(lastSong, playWhenReady, null)
@@ -524,10 +524,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
             playWhenReady: Boolean,
             extras: Bundle?
         ) {
-            Log.e(TAG, "onPrepareFromMediaId: $prepareId")
+            logger.error("onPrepareFromMediaId: $prepareId")
             val idSplit = prepareId.split('/')
             if (idSplit.size != 2) {
-                Log.e(TAG, "media id doesn't include parent id: $prepareId")
+                logger.error("media id doesn't include parent id: $prepareId")
                 return
             }
 
@@ -538,19 +538,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val plist = mediaSource.loadPlaylist(playlistId)
                 val currPlaylist = plist?.items()
                 if (currPlaylist == null) {
-                    Log.e(TAG, "Failed to load playlist: $playlistId")
+                    logger.error( "Failed to load playlist: $playlistId")
                     return@launch
                 }
 
                 val itemToPlay = currPlaylist.find { item ->
                     if (item !is Track) {
-                        Log.w(TAG, "Skipping unknown playlist item: $item")
+                        logger.warn( "Skipping unknown playlist item: $item")
                         return@find false
                     }
                     item.ratingKey.toString() == mediaId
                 }
                 if (itemToPlay == null) {
-                    Log.w(TAG, "Content not found: MediaID=$mediaId")
+                    logger.warn( "Content not found: MediaID=$mediaId")
                     // TODO: Notify caller of the error.
                 } else {
                     val playbackStartPositionMs =
@@ -571,11 +571,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onPrepareFromSearch(query: String, playWhenReady: Boolean, extras: Bundle?) {
-            Log.e(TAG, "onPrepareFromSearch: $query")
+            logger.error( "onPrepareFromSearch: $query")
         }
 
         override fun onPrepareFromUri(uri: Uri, playWhenReady: Boolean, extras: Bundle?) {
-            Log.e(TAG, "onPrepareFromUri: $uri")
+            logger.error( "onPrepareFromUri: $uri")
         }
 
         override fun onCommand(
@@ -631,7 +631,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onPlayerError(error: PlaybackException) {
             var message = "player error";
-            Log.e(TAG, "Player error: " + error.errorCodeName + " (" + error.errorCode + ")");
+            logger.error( "Player error: " + error.errorCodeName + " (" + error.errorCode + ")");
             if (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
                 || error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
             ) {

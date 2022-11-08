@@ -181,25 +181,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
         sessionToken = mediaSession.sessionToken
 
-        if (!isAuthenticated()) {
-            logger.info("Not logged in")
-            requireLogin()
-            return
-        }
-        checkInit()
-    }
-
-    fun checkInit() {
-        if (this::mediaSource.isInitialized) {
-            return
-        }
-        // The media library is built from a remote JSON file. We'll create the source here,
-        // and then use a suspend function to perform the download off the main thread.
-        mediaSource = PlexSource(plexToken!!)
-        serviceScope.launch {
-            mediaSource.load()
-        }
-
         // ExoPlayer will manage the MediaSession for us.
         mediaSessionConnector = MediaSessionConnector(mediaSession).apply {
             setPlaybackPreparer(UampPlaybackPreparer())
@@ -255,6 +236,26 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         // Register to handle login/logout commands.
         mediaSessionConnector.registerCustomCommandReceiver(AutomotiveCommandReceiver())
+
+        if (!isAuthenticated()) {
+            logger.info("Not logged in")
+            requireLogin()
+            return
+        }
+
+        checkInit()
+    }
+
+    fun checkInit() {
+        if (this::mediaSource.isInitialized) {
+            return
+        }
+        // The media library is built from a remote JSON file. We'll create the source here,
+        // and then use a suspend function to perform the download off the main thread.
+        mediaSource = PlexSource(plexToken!!)
+        serviceScope.launch {
+            mediaSource.load()
+        }
     }
 
     override fun onDestroy() {

@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Button
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -94,6 +97,7 @@ class LoginActivity : ComponentActivity() {
                 ) {
                     var username by remember { mutableStateOf("") }
                     var password by remember { mutableStateOf("") }
+                    var errorMessage by remember { mutableStateOf("") }
                     val focusManager = LocalFocusManager.current
                     val keyboardManager = LocalSoftwareKeyboardController.current
 
@@ -122,23 +126,43 @@ class LoginActivity : ComponentActivity() {
                         ),
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("password", style = TextStyle(color = Color.Black)) })
+                    if (errorMessage != "") {
+                        Text(
+                            text = errorMessage,
+                            color = MaterialTheme.colors.error,
+                            style = MaterialTheme.typography.body2,
+                        )
+                    }
                     Button(onClick = {
-                        doLogin(username, password)
+                        errorMessage = ""
+                        doLogin(username, password) { err ->
+                            errorMessage = err
+                        }
                     }) {
                         Text("Sign In")
                     }
+                }
+                Column(
+                    verticalArrangement = Arrangement.Bottom,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Version: ${BuildConfig.VERSION_NAME}")
                 }
             }
         }
     }
 
-    fun doLogin(username: String, password: String) {
+    fun doLogin(username: String, password: String, errCb: (String) -> Unit) {
         CoroutineScope(Dispatchers.IO).launch {
-            val loginRes = MyPlexAccount.login(username, password)
-            if (!loginRes.isNullOrEmpty()) {
-                val token = "${Config.X_PLEX_IDENTIFIER}|${loginRes}"
-                setToken(token)
-                pinLoginJob?.cancel()
+            try {
+                val loginRes = MyPlexAccount.login(username, password)
+                if (!loginRes.isNullOrEmpty()) {
+                    val token = "${Config.X_PLEX_IDENTIFIER}|${loginRes}"
+                    setToken(token)
+                    pinLoginJob?.cancel()
+                }
+            } catch (exc: Exception) {
+                errCb(exc.message ?: "login error");
             }
         }
     }

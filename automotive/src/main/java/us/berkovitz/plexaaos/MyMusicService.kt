@@ -296,13 +296,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentMediaId: String, result: Result<List<MediaItem>>) {
+        logger.info( "onLoadChildren: $parentMediaId")
+
         if (!isAuthenticated()) {
             result.sendResult(null)
+            logger.info( "not authenticated")
             return
         }
         checkInit()
-
-        logger.info( "onLoadChildren: $parentMediaId")
 
         var resultsSent = false
         if (parentMediaId == UAMP_PLAYLISTS_ROOT || parentMediaId == UAMP_BROWSABLE_ROOT) {
@@ -415,7 +416,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 .setState(PlaybackStateCompat.STATE_NONE, 0, 0F)
                 .build()
         )
+        mediaSessionConnector.setCustomErrorMessage(null)
         mediaSessionConnector.invalidateMediaSessionPlaybackState()
+        mediaSessionConnector.invalidateMediaSessionMetadata()
+        mediaSessionConnector.invalidateMediaSessionQueue()
+        this.notifyChildrenChanged(UAMP_BROWSABLE_ROOT)
         callback?.send(Activity.RESULT_OK, Bundle.EMPTY)
         return true
     }
@@ -517,7 +522,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val lastSong = AndroidStorage.getLastSong(applicationContext)
                 if (lastSong == null) {
                     logger.warn("Last song not found")
-                    //preparePlaylist(emptyList(), null, false, 0)
                     return@launch
                 }
                 onPrepareFromMediaId(lastSong, playWhenReady, null)

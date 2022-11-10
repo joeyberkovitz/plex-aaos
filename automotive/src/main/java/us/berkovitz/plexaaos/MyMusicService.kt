@@ -39,6 +39,7 @@ import us.berkovitz.plexaaos.library.PlexSource
 import us.berkovitz.plexaaos.library.UAMP_BROWSABLE_ROOT
 import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
 import us.berkovitz.plexaaos.library.from
+import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.Track
 
 /**
@@ -414,6 +415,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 .setState(PlaybackStateCompat.STATE_NONE, 0, 0F)
                 .build()
         )
+        mediaSessionConnector.invalidateMediaSessionPlaybackState()
         callback?.send(Activity.RESULT_OK, Bundle.EMPTY)
         return true
     }
@@ -509,11 +511,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 requireLogin()
                 return
             }
+            checkInit()
             logger.debug("onPrepare")
             serviceScope.launch {
                 val lastSong = AndroidStorage.getLastSong(applicationContext)
                 if (lastSong == null) {
                     logger.warn("Last song not found")
+                    //preparePlaylist(emptyList(), null, false, 0)
                     return@launch
                 }
                 onPrepareFromMediaId(lastSong, playWhenReady, null)
@@ -536,7 +540,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val mediaId = idSplit[1]
 
             serviceScope.launch {
-                val plist = mediaSource.loadPlaylist(playlistId)
+                val plist: Playlist?
+                try {
+                    plist = mediaSource.loadPlaylist(playlistId)
+                } catch (exc: Exception){
+                    logger.error("Failed to find playlist: $playlistId: ${exc.message}, ${exc.printStackTrace()}")
+                    return@launch
+                }
                 val currPlaylist = plist?.items()
                 if (currPlaylist == null) {
                     logger.error( "Failed to load playlist: $playlistId")

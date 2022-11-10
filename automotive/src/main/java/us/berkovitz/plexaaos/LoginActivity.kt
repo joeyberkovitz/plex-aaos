@@ -176,10 +176,9 @@ class LoginActivity : ComponentActivity() {
             accountManager.addAccountExplicitly(account, token, null)
             pinLoginJob?.cancel()
             musicServiceConnection.sendCommand(LOGIN, Bundle.EMPTY) { _, result ->
-
+                mResultBundle = Bundle()
+                finish()
             }
-            mResultBundle = Bundle()
-            finish()
         }
     }
 

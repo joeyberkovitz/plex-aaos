@@ -29,6 +29,7 @@ import com.google.android.exoplayer2.util.Util
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.berkovitz.plexaaos.extensions.flag
 import us.berkovitz.plexaaos.extensions.id
@@ -421,7 +422,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         mediaSessionConnector.invalidateMediaSessionMetadata()
         mediaSessionConnector.invalidateMediaSessionQueue()
         this.notifyChildrenChanged(UAMP_BROWSABLE_ROOT)
-        callback?.send(Activity.RESULT_OK, Bundle.EMPTY)
+        isAuthenticated()
+        checkInit()
+        mediaSource.whenReady {
+            serviceScope.launch {
+                delay(500L)
+                callback?.send(Activity.RESULT_OK, Bundle.EMPTY)
+            }
+        }
         return true
     }
 

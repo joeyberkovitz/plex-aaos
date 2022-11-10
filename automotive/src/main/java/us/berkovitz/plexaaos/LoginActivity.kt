@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.berkovitz.plexaaos.ui.theme.PlexAAOSTheme
 import us.berkovitz.plexapi.config.Config
@@ -98,6 +99,7 @@ class LoginActivity : ComponentActivity() {
                     var username by remember { mutableStateOf("") }
                     var password by remember { mutableStateOf("") }
                     var errorMessage by remember { mutableStateOf("") }
+                    var enableSignin by remember { mutableStateOf(true) }
                     val focusManager = LocalFocusManager.current
                     val keyboardManager = LocalSoftwareKeyboardController.current
 
@@ -135,10 +137,12 @@ class LoginActivity : ComponentActivity() {
                     }
                     Button(onClick = {
                         errorMessage = ""
+                        enableSignin = false
                         doLogin(username, password) { err ->
                             errorMessage = err
+                            enableSignin = true
                         }
-                    }) {
+                    }, enabled = enableSignin) {
                         Text("Sign In")
                     }
                 }

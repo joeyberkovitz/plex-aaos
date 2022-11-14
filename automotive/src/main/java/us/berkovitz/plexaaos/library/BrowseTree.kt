@@ -173,6 +173,19 @@ fun MediaMetadataCompat.Builder.from(
     displayTitle = mediaItem.title
     displayDescription = mediaItem.title
 
+    artist = mediaItem.grandparentTitle
+    album = mediaItem.parentTitle
+
+    var subtitle = ""
+    if(!mediaItem.grandparentTitle.isNullOrEmpty())
+        subtitle = mediaItem.grandparentTitle!!
+    if(!mediaItem.parentTitle.isNullOrEmpty()){
+        if(subtitle.isNotEmpty())
+            subtitle += " - "
+        subtitle += mediaItem.parentTitle!!
+    }
+    displaySubtitle = subtitle
+
     // Add downloadStatus to force the creation of an "extras" bundle in the resulting
     // MediaMetadataCompat object. This is needed to send accurate metadata to the
     // media session during updates.

@@ -1,6 +1,7 @@
 package us.berkovitz.plexaaos.library
 
 import android.util.Log
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import us.berkovitz.plexaaos.PlexLoggerFactory
@@ -36,7 +37,7 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
 
     override suspend fun loadPlaylist(playlistId: String): Playlist? {
         val plist = loadPlaylistItems(playlistId)
-        plist.let{ res ->
+        plist.let { res ->
             if (res != null) {
                 setPlaylistState(playlistId, res, STATE_INITIALIZED)
             } else {
@@ -76,7 +77,11 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
                     return@withContext null
                 }
 
-                playlist = Playlist.fromId(playlistId.toLong(), plexServer!!)
+                try {
+                    playlist = Playlist.fromId(playlistId.toLong(), plexServer!!)
+                } catch (exc: Exception) {
+                    FirebaseCrashlytics.getInstance().recordException(exc)
+                }
                 if (playlist == null) {
                     logger.warn( "Failed to find playlist: $playlistId")
                     return@withContext null
@@ -129,7 +134,7 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
                         val connUrl = conn.uri
                         val overrideToken = server.accessToken
                         val potentialServer = PlexServer(connUrl, overrideToken ?: plexToken)
-                        logger.debug( "Trying server: ${connUrl}")
+                        logger.debug( "Trying server: $connUrl")
                         if(potentialServer.testConnection()){
                             logger.debug( "Connection succeeded")
                             hasRemote = true

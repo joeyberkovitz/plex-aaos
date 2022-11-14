@@ -252,10 +252,13 @@ inline var MediaMetadataCompat.Builder.flag: Int
     }
 
 
-fun MediaMetadataCompat.toMediaItemMetadata(): com.google.android.exoplayer2.MediaMetadata {
+fun MediaMetadataCompat.toMediaItemMetadata(): MediaMetadata {
     return with(MediaMetadata.Builder()) {
         setTitle(title)
         setDisplayTitle(displayTitle)
+        setDescription(displaySubtitle)
+        setSubtitle(displaySubtitle)
+        setArtist(artist)
         setAlbumArtist(artist)
         setAlbumTitle(album)
         setComposer(composer)

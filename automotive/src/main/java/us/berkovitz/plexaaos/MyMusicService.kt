@@ -26,12 +26,14 @@ import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector.Cust
 import com.google.android.exoplayer2.ext.mediasession.TimelineQueueNavigator
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
 import com.google.android.exoplayer2.util.Util
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import us.berkovitz.plexaaos.extensions.displayDescription
+import us.berkovitz.plexaaos.extensions.displaySubtitle
+import us.berkovitz.plexaaos.extensions.displayTitle
 import us.berkovitz.plexaaos.extensions.flag
 import us.berkovitz.plexaaos.extensions.id
 import us.berkovitz.plexaaos.extensions.toMediaItem
@@ -40,7 +42,7 @@ import us.berkovitz.plexaaos.library.MusicSource
 import us.berkovitz.plexaaos.library.PlexSource
 import us.berkovitz.plexaaos.library.UAMP_BROWSABLE_ROOT
 import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
-import us.berkovitz.plexaaos.library.from
+import us.berkovitz.plexaaos.library.buildMeta
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.Track
 
@@ -341,8 +343,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             return@forEach
                         }
                         children += MediaItem(
-                            MediaMetadataCompat.Builder().from(item, parentMediaId)
-                                .build().description, MediaItem.FLAG_PLAYABLE
+                            (MediaMetadataCompat.Builder().buildMeta(item, parentMediaId)).description,
+                            MediaItem.FLAG_PLAYABLE
                         )
                     }
                     result.sendResult(children)
@@ -586,7 +588,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
                     preparePlaylist(
                         buildPlaylist(currPlaylist, playlistId),
-                        MediaMetadataCompat.Builder().from(itemToPlay, playlistId).build(),
+                        MediaMetadataCompat.Builder().buildMeta(itemToPlay, playlistId),
                         playWhenReady,
                         playbackStartPositionMs
                     )
@@ -621,7 +623,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             playlist: Array<us.berkovitz.plexapi.media.MediaItem>,
             playlistId: String
         ): List<MediaMetadataCompat> {
-            return playlist.map { MediaMetadataCompat.Builder().from(it, playlistId).build() }
+            return playlist.map { MediaMetadataCompat.Builder().buildMeta(it, playlistId) }
         }
     }
 

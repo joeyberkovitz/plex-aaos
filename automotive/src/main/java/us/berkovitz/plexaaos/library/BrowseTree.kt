@@ -84,7 +84,7 @@ class BrowseTree(
             val playlistId = playlist.ratingKey.toString()
             val playlistChildren = mediaIdToChildren[playlistId] ?: buildPlaylistRoot(playlist)
             for (item in playlist.loadedItems()) {
-                playlistChildren += MediaMetadataCompat.Builder().from(item).build()
+                playlistChildren += MediaMetadataCompat.Builder().buildMeta(item)
             }
         }
     }
@@ -171,20 +171,11 @@ fun MediaMetadataCompat.Builder.from(
     displayIconUri = iconUrl
     albumArtUri = iconUrl
     displayTitle = mediaItem.title
-    displayDescription = mediaItem.title
+    displaySubtitle = mediaItem.grandparentTitle
+    displayDescription = mediaItem.parentTitle
 
     artist = mediaItem.grandparentTitle
     album = mediaItem.parentTitle
-
-    var subtitle = ""
-    if(!mediaItem.grandparentTitle.isNullOrEmpty())
-        subtitle = mediaItem.grandparentTitle!!
-    if(!mediaItem.parentTitle.isNullOrEmpty()){
-        if(subtitle.isNotEmpty())
-            subtitle += " - "
-        subtitle += mediaItem.parentTitle!!
-    }
-    displaySubtitle = subtitle
 
     // Add downloadStatus to force the creation of an "extras" bundle in the resulting
     // MediaMetadataCompat object. This is needed to send accurate metadata to the
@@ -194,6 +185,17 @@ fun MediaMetadataCompat.Builder.from(
     // Allow it to be used in the typical builder style.
     return this
 }
+
+fun MediaMetadataCompat.Builder.buildMeta(
+    mediaItem: us.berkovitz.plexapi.media.MediaItem,
+    playlistId: String? = null
+): MediaMetadataCompat {
+    return from(mediaItem, playlistId).build().apply {
+        description.extras?.putAll(bundle)
+    }
+}
+
+
 private const val TAG = "BrowseTree"
 const val UAMP_BROWSABLE_ROOT = "/"
 const val UAMP_EMPTY_ROOT = "@empty@"

@@ -22,7 +22,6 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaMetadataCompat
 import com.google.android.exoplayer2.MediaMetadata
-import com.google.android.exoplayer2.util.MimeTypes
 
 /**
  * Useful extensions for [MediaMetadataCompat].

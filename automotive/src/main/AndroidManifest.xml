@@ -4,9 +4,7 @@
 
     <uses-feature
         android:name="android.hardware.type.automotive"
-        android:required="true" />
-
-    <!-- Required for AAOS support -->
+        android:required="true" /> <!-- Required for AAOS support -->
     <uses-feature
         android:name="android.hardware.wifi"
         android:required="false" />
@@ -47,14 +45,21 @@
                 <action android:name="android.intent.action.ACTION_SIGN_IN" />
             </intent-filter>
         </activity>
-
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="@string/title_activity_settings">
+            <intent-filter>
+                <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
+            </intent-filter>
+        </activity>
         <!--
  Main music service, provides media browsing and media playback services to
          consumers through MediaBrowserService and MediaSession. Consumers connect to it through
          MediaBrowser (for browsing) and MediaController (for playback control)
         -->
         <service
-            android:name="us.berkovitz.plexaaos.MyMusicService"
+            android:name=".MyMusicService"
             android:exported="true"
             tools:ignore="ExportedService">
             <intent-filter>
@@ -62,12 +67,13 @@
             </intent-filter>
         </service>
         <service
-            android:name="us.berkovitz.plexaaos.AuthenticatorService"
+            android:name=".AuthenticatorService"
             android:exported="true"
             tools:ignore="ExportedService">
             <intent-filter>
                 <action android:name="android.accounts.AccountAuthenticator" />
             </intent-filter>
+
             <meta-data
                 android:name="android.accounts.AccountAuthenticator"
                 android:resource="@xml/authenticator" />
@@ -79,4 +85,5 @@
             android:exported="true"
             tools:ignore="ExportedContentProvider" />
     </application>
+
 </manifest>

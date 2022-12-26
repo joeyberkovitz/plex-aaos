@@ -114,16 +114,18 @@ abstract class AbstractMusicSource : MusicSource {
     }
 
     fun setPlaylistState(playlistId: String, playlist: Playlist?, state: Int){
-        if (state == STATE_INITIALIZED || state == STATE_ERROR) {
-            synchronized(playlistReadyListeners) {
-                playlistState[playlistId] = state
-                playlistReadyListeners[playlistId]?.forEach { listener ->
-                    listener(playlist)
+        synchronized(playlistState) {
+            if (state == STATE_INITIALIZED || state == STATE_ERROR) {
+                synchronized(playlistReadyListeners) {
+                    playlistState[playlistId] = state
+                    playlistReadyListeners[playlistId]?.forEach { listener ->
+                        listener(playlist)
+                    }
+                    playlistReadyListeners.clear()
                 }
-                playlistReadyListeners.clear()
+            } else {
+                playlistState[playlistId] = state
             }
-        } else {
-            playlistState[playlistId] = state
         }
     }
 
@@ -148,18 +150,23 @@ abstract class AbstractMusicSource : MusicSource {
         }
 
     override fun playlistWhenReady(playlistId: String, performAction: (Playlist?) -> Unit): Boolean =
-        when (playlistState[playlistId]) {
-            null, STATE_CREATED, STATE_INITIALIZING -> {
-                if(playlistReadyListeners[playlistId] == null){
-                    playlistReadyListeners[playlistId] = mutableListOf()
+        synchronized(playlistState) {
+            when (playlistState[playlistId]) {
+                null, STATE_CREATED, STATE_INITIALIZING -> {
+                    synchronized(playlistReadyListeners) {
+                        if (playlistReadyListeners[playlistId] == null) {
+                            playlistReadyListeners[playlistId] = mutableListOf()
+                        }
+
+                        playlistReadyListeners[playlistId]!! += performAction
+                        false
+                    }
                 }
 
-                playlistReadyListeners[playlistId]!! += performAction
-                false
-            }
-            else -> {
-                performAction(getPlaylist(playlistId))
-                true
+                else -> {
+                    performAction(getPlaylist(playlistId))
+                    true
+                }
             }
         }
 

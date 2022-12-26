@@ -45,6 +45,10 @@ android {
         versionCode 19
         versionName "0.4.2"
 
+        buildFeatures {
+            buildConfig = true
+        }
+
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary true

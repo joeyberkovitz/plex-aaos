@@ -26,16 +26,14 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
     }
 
     override suspend fun load() {
-        updateCatalog().let { updatedCatalog ->
-            catalog = updatedCatalog
-            state = STATE_INITIALIZED
-        } ?: run {
-            catalog = hashMapOf()
-            state = STATE_ERROR
-        }
+        state = updateCatalog()
     }
 
     override suspend fun loadPlaylist(playlistId: String): Playlist? {
+        val state = getPlaylistState(playlistId)
+        if (state == STATE_INITIALIZING) return null
+        else if (state != STATE_INITIALIZED) setPlaylistState(playlistId, null, STATE_INITIALIZING)
+
         val plist = loadPlaylistItems(playlistId)
         plist.let { res ->
             if (res != null) {
@@ -67,13 +65,13 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
         return withContext(Dispatchers.IO) {
             var playlist = catalog[playlistId]
             if (playlist == null) {
-                logger.warn( "Playlist $playlistId missing from catalog")
+                logger.warn("Playlist $playlistId missing from catalog")
                 if (plexServer == null) {
                     findServer()
                 }
                 val playlistIdLong = playlistId.toLongOrNull()
                 if (playlistIdLong == null) {
-                    logger.warn( "Invalid playlist id: $playlistId")
+                    logger.warn("Invalid playlist id: $playlistId")
                     return@withContext null
                 }
 
@@ -83,46 +81,46 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
                     FirebaseCrashlytics.getInstance().recordException(exc)
                 }
                 if (playlist == null) {
-                    logger.warn( "Failed to find playlist: $playlistId")
+                    logger.warn("Failed to find playlist: $playlistId")
                     return@withContext null
                 }
-                playlist.setServer(plexServer!!)
-                catalog[playlistId] = playlist
+                playlist!!.setServer(plexServer!!)
+                catalog[playlistId] = playlist!!
             }
 
             try {
-                playlist.items()
-                logger.info( "Playlist $playlistId loaded")
+                val items = playlist!!.items()
+                logger.info("Playlist $playlistId loaded, ${items.size}")
             } catch (e: Exception) {
-                logger.error( "Error loading $playlistId: ${e.message}, ${e.printStackTrace()}")
+                logger.error("Error loading $playlistId: ${e.message}, ${e.printStackTrace()}")
                 return@withContext null
             }
             return@withContext playlist
         }
     }
 
-    private suspend fun updateCatalog(): MutableMap<String, Playlist> {
+    private suspend fun updateCatalog(): Int {
         return withContext(Dispatchers.IO) {
             findServer()
             if (plexServer == null) {
-                return@withContext hashMapOf()
+                return@withContext STATE_ERROR
             }
 
             val playlists = plexServer!!.playlists(PlaylistType.AUDIO)
-            val retMap = hashMapOf<String, Playlist>()
             playlists.forEach {
-                retMap[it.ratingKey.toString()] = it
+                if (!catalog.containsKey(it.ratingKey.toString()))
+                    catalog[it.ratingKey.toString()] = it
             }
             /*for (playlist in playlists) {
                 // make sure items are loaded here
                 playlist.items()
             }*/
-            return@withContext retMap
+            return@withContext STATE_INITIALIZED
         }
     }
 
     private suspend fun findServer() {
-        if(plexServer != null)
+        if (plexServer != null)
             return
 
         val servers = plexAccount.resources()
@@ -134,14 +132,14 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
                         val connUrl = conn.uri
                         val overrideToken = server.accessToken
                         val potentialServer = PlexServer(connUrl, overrideToken ?: plexToken)
-                        logger.debug( "Trying server: $connUrl")
-                        if(potentialServer.testConnection()){
-                            logger.debug( "Connection succeeded")
+                        logger.debug("Trying server: $connUrl")
+                        if (potentialServer.testConnection()) {
+                            logger.debug("Connection succeeded")
                             hasRemote = true
                             plexServer = potentialServer
                             break
                         } else {
-                            logger.debug( "Connection failed")
+                            logger.debug("Connection failed")
                         }
                     }
                 }

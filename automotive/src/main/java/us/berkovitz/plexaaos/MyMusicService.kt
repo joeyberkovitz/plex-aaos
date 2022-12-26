@@ -119,6 +119,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var currentMediaItemIndex: Int = 0
 
     private var plexToken: String? = null
+    private var active = false
 
     /**
      * This must be `by lazy` because the source won't initially be ready.
@@ -442,6 +443,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
      * playback to continue and allow users to stop it with the notification.
      */
     override fun onTaskRemoved(rootIntent: Intent) {
+        // set last song, ignore upcoming event
+        saveLastSong()
+        active = false
         super.onTaskRemoved(rootIntent)
 
         /**
@@ -487,6 +491,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             metadataList.map { it.toMediaItem() }, initialWindowIndex, playbackStartPositionMs
         )
         currentPlayer.prepare()
+        active = true
     }
 
     private fun switchToPlayer(previousPlayer: Player?, newPlayer: Player) {
@@ -555,43 +560,50 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val mediaId = idSplit[1]
 
             serviceScope.launch {
-                val plist: Playlist?
+                logger.info("load playlist starting")
                 try {
-                    plist = mediaSource.loadPlaylist(playlistId)
-                } catch (exc: Exception){
+                    mediaSource.loadPlaylist(playlistId)
+                } catch (exc: Exception) {
                     logger.error("Failed to find playlist: $playlistId: ${exc.message}, ${exc.printStackTrace()}")
-                    return@launch
                 }
-                val currPlaylist = plist?.items()
-                if (currPlaylist == null) {
-                    logger.error( "Failed to load playlist: $playlistId")
-                    return@launch
-                }
+                logger.info("load playlist complete")
+            }
 
-                val itemToPlay = currPlaylist.find { item ->
-                    if (item !is Track) {
-                        logger.warn( "Skipping unknown playlist item: $item")
-                        return@find false
+            mediaSource.playlistWhenReady(playlistId) { plist ->
+                logger.info("playlist when ready")
+                serviceScope.launch {
+                    logger.info("playlist when ready scope")
+                    val currPlaylist = plist?.items()
+                    if (currPlaylist == null) {
+                        logger.error("Failed to load playlist: $playlistId")
+                        return@launch
                     }
-                    item.ratingKey.toString() == mediaId
-                }
-                if (itemToPlay == null) {
-                    logger.warn( "Content not found: MediaID=$mediaId")
-                    // TODO: Notify caller of the error.
-                } else {
-                    val playbackStartPositionMs =
-                        extras?.getLong(
-                            MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS,
-                            C.TIME_UNSET
-                        )
-                            ?: C.TIME_UNSET
 
-                    preparePlaylist(
-                        buildPlaylist(currPlaylist, playlistId),
-                        MediaMetadataCompat.Builder().buildMeta(itemToPlay, playlistId),
-                        playWhenReady,
-                        playbackStartPositionMs
-                    )
+                    val itemToPlay = currPlaylist.find { item ->
+                        if (item !is Track) {
+                            logger.warn("Skipping unknown playlist item: $item")
+                            return@find false
+                        }
+                        item.ratingKey.toString() == mediaId
+                    }
+                    if (itemToPlay == null) {
+                        logger.warn("Content not found: MediaID=$mediaId")
+                        // TODO: Notify caller of the error.
+                    } else {
+                        val playbackStartPositionMs =
+                            extras?.getLong(
+                                MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS,
+                                C.TIME_UNSET
+                            )
+                                ?: C.TIME_UNSET
+
+                        preparePlaylist(
+                            buildPlaylist(currPlaylist, playlistId),
+                            MediaMetadataCompat.Builder().buildMeta(itemToPlay, playlistId),
+                            playWhenReady,
+                            playbackStartPositionMs
+                        )
+                    }
                 }
             }
         }
@@ -636,22 +648,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 || events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
                 || events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED)
             ) {
-                currentMediaItemIndex = if (currentPlaylistItems.isNotEmpty()) {
-                    Util.constrainValue(
-                        player.currentMediaItemIndex,
-                        /* min = */ 0,
-                        /* max = */ currentPlaylistItems.size - 1
-                    )
-                } else 0
-                if (currentPlaylistItems.isNotEmpty()) {
-                    val id = currentPlaylistItems[currentMediaItemIndex].id
-                    if (id != null) {
-                        serviceScope.launch {
-                            AndroidStorage.setLastSong(id, applicationContext)
-                        }
-                    }
-                }
-
+                saveLastSong()
             }
         }
 
@@ -668,6 +665,27 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 message,
                 Toast.LENGTH_LONG
             ).show()
+        }
+    }
+
+    private fun saveLastSong(){
+        if(!active || currentPlayer.mediaItemCount == 0) return
+        currentMediaItemIndex = if (currentPlaylistItems.isNotEmpty()) {
+            Util.constrainValue(
+                currentPlayer.currentMediaItemIndex,
+                /* min = */ 0,
+                /* max = */ currentPlaylistItems.size - 1
+            )
+        } else 0
+
+        if (currentPlaylistItems.isNotEmpty()) {
+            val id = currentPlaylistItems[currentMediaItemIndex].id
+            if (id != null) {
+                serviceScope.launch {
+                    logger.info("Setting last song: ${id}")
+                    AndroidStorage.setLastSong(id, applicationContext)
+                }
+            }
         }
     }
 }

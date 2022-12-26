@@ -3,4 +3,8 @@
     <string name="title_activity_login">LoginActivity</string>
     <string name="error_login_button">Click to sign in</string>
     <string name="playlists_title">Playlists</string>
+    <string name="title_activity_settings">SettingsActivity</string>
+
+    <!-- Preference Titles -->
+    <string name="account_header">Account</string>
 </resources>

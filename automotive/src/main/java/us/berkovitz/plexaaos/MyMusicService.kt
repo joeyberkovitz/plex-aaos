@@ -120,6 +120,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private var plexToken: String? = null
     private var active = false
+    private var wasActive = false
+    private var previousPosition: Long = 0
 
     /**
      * This must be `by lazy` because the source won't initially be ready.
@@ -487,11 +489,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentPlayer.playWhenReady = playWhenReady
         currentPlayer.stop()
         // Set playlist and prepare.
+        logger.info("starting playback at position $initialWindowIndex, $playbackStartPositionMs")
         currentPlayer.setMediaItems(
             metadataList.map { it.toMediaItem() }, initialWindowIndex, playbackStartPositionMs
         )
         currentPlayer.prepare()
         active = true
+        wasActive = true
     }
 
     private fun switchToPlayer(previousPlayer: Player?, newPlayer: Player) {
@@ -540,7 +544,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     logger.warn("Last song not found")
                     return@launch
                 }
-                onPrepareFromMediaId(lastSong, playWhenReady, null)
+                var position = AndroidStorage.getLastPosition(applicationContext)
+                if (position == null)
+                    position = 0
+                val extras = Bundle()
+                extras.putLong(MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS, position)
+                //logger.info("Triggering prepareFromMediaId: $lastSong, $position")
+                onPrepareFromMediaId(lastSong, playWhenReady, extras)
             }
         }
 
@@ -560,19 +570,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val mediaId = idSplit[1]
 
             serviceScope.launch {
-                logger.info("load playlist starting")
+                //logger.info("load playlist starting")
                 try {
                     mediaSource.loadPlaylist(playlistId)
                 } catch (exc: Exception) {
                     logger.error("Failed to find playlist: $playlistId: ${exc.message}, ${exc.printStackTrace()}")
                 }
-                logger.info("load playlist complete")
+                //logger.info("load playlist complete")
             }
 
             mediaSource.playlistWhenReady(playlistId) { plist ->
-                logger.info("playlist when ready")
+                //logger.info("playlist when ready")
                 serviceScope.launch {
-                    logger.info("playlist when ready scope")
+                    //logger.info("playlist when ready scope")
                     val currPlaylist = plist?.items()
                     if (currPlaylist == null) {
                         logger.error("Failed to load playlist: $playlistId")
@@ -644,12 +654,24 @@ class MyMusicService : MediaBrowserServiceCompat() {
      */
     private inner class PlayerEventListener : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
+            //logger.info("Position: ${currentPlayer.currentPosition}")
             if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)
                 || events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
                 || events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED)
             ) {
                 saveLastSong()
             }
+        }
+
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int
+        ) {
+            super.onPositionDiscontinuity(oldPosition, newPosition, reason)
+
+            //logger.info("position discontinuity: ${oldPosition.positionMs}, ${newPosition.positionMs}")
+            previousPosition = oldPosition.positionMs
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -669,7 +691,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun saveLastSong(){
-        if(!active || currentPlayer.mediaItemCount == 0) return
+        if(!active || currentPlayer.mediaItemCount == 0) {
+            if(wasActive) {
+                serviceScope.launch {
+                    //logger.info("Set last position to previous $previousPosition")
+                    AndroidStorage.setLastPosition(previousPosition, applicationContext)
+                }
+            }
+            return
+        }
         currentMediaItemIndex = if (currentPlaylistItems.isNotEmpty()) {
             Util.constrainValue(
                 currentPlayer.currentMediaItemIndex,
@@ -682,8 +712,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val id = currentPlaylistItems[currentMediaItemIndex].id
             if (id != null) {
                 serviceScope.launch {
-                    logger.info("Setting last song: ${id}")
+                    //logger.info("Setting last song: ${id}")
                     AndroidStorage.setLastSong(id, applicationContext)
+                    //logger.info("Set last position ${currentPlayer.currentPosition}")
+                    AndroidStorage.setLastPosition(currentPlayer.currentPosition, applicationContext)
                 }
             }
         }

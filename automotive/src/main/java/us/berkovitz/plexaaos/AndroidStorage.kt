@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 object AndroidStorage {
     private const val SHARED_PREFS_NAME = "plexaaos"
     private const val LAST_MEDIA_ID = "last_media_id"
+    private const val LAST_POSITION = "last_position"
 
     suspend fun getKey(key: String, context: Context): String? {
         return withContext(Dispatchers.IO) {
@@ -29,6 +30,14 @@ object AndroidStorage {
 
     suspend fun setLastSong(mediaId: String, context: Context){
         return setKey(LAST_MEDIA_ID, mediaId, context)
+    }
+
+    suspend fun getLastPosition(context: Context): Long? {
+        return getKey(LAST_POSITION, context)?.toLongOrNull()
+    }
+
+    suspend fun setLastPosition(position: Long, context: Context){
+        return setKey(LAST_POSITION, position.toString(), context)
     }
 
 }

@@ -1,10 +1,14 @@
 package us.berkovitz.plexaaos.library
 
+import android.content.Context
 import android.util.Log
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import us.berkovitz.plexaaos.AndroidStorage
 import us.berkovitz.plexaaos.PlexLoggerFactory
+import us.berkovitz.plexaaos.PlexUtil
 import us.berkovitz.plexapi.media.MediaItem
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.PlaylistType
@@ -12,7 +16,11 @@ import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.MyPlexAccount
 import kotlin.coroutines.coroutineContext
 
-class PlexSource(private val plexToken: String) : AbstractMusicSource() {
+class PlexSource(
+    private val plexToken: String,
+    private val context: Context
+) :
+    AbstractMusicSource() {
     companion object {
         val logger = PlexLoggerFactory.loggerFor(PlexSource::class)
     }
@@ -123,8 +131,16 @@ class PlexSource(private val plexToken: String) : AbstractMusicSource() {
         if (plexServer != null)
             return
 
-        val servers = plexAccount.resources()
+        val selectedServer = AndroidStorage.getServer(context)
+
+        //TODO: if setting is changed, need to force a reload
+        val servers = PlexUtil.getServers(plexToken)
         for (server in servers) {
+            // If a server is set, force that one
+            if(selectedServer != null && server.clientIdentifier != selectedServer){
+                continue
+            }
+
             var hasRemote = false
             if (server.connections != null) {
                 for (conn in server.connections!!) {

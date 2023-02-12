@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 
 object AndroidStorage {
     private const val SHARED_PREFS_NAME = "plexaaos"
+    private const val SERVER = "server"
     private const val LAST_MEDIA_ID = "last_media_id"
     private const val LAST_POSITION = "last_position"
 
@@ -24,6 +25,13 @@ object AndroidStorage {
         }
     }
 
+    suspend fun removeKey(key: String, context: Context) {
+        return withContext(Dispatchers.IO) {
+            context.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)?.edit()
+                ?.remove(key)?.apply()
+        }
+    }
+
     suspend fun getLastSong(context: Context): String? {
         return getKey(LAST_MEDIA_ID, context)
     }
@@ -38,6 +46,18 @@ object AndroidStorage {
 
     suspend fun setLastPosition(position: Long, context: Context){
         return setKey(LAST_POSITION, position.toString(), context)
+    }
+
+    suspend fun getServer(context: Context): String? {
+        return getKey(SERVER, context)
+    }
+
+    suspend fun setServer(server: String?, context: Context){
+        if(server == null){
+            removeKey(SERVER, context)
+            return
+        }
+        return setKey(SERVER, server, context)
     }
 
 }

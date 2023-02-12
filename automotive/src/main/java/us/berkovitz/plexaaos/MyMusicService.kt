@@ -105,8 +105,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val PAGE_SIZE = 100
     }
 
-    private lateinit var accountManager: AccountManager
-
+    private lateinit var plexUtil: PlexUtil
     private lateinit var mediaSource: MusicSource
 
     // The current player will either be an ExoPlayer (for local playback) or a CastPlayer (for
@@ -173,7 +172,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     override fun onCreate() {
         super.onCreate()
         AndroidPlexApi.initPlexApi(this)
-        accountManager = AccountManager.get(this)
+        plexUtil = PlexUtil(this)
 
         // Build a PendingIntent that can be used to launch the UI.
         val sessionActivityPendingIntent =
@@ -263,7 +262,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         // The media library is built from a remote JSON file. We'll create the source here,
         // and then use a suspend function to perform the download off the main thread.
-        mediaSource = PlexSource(plexToken!!)
+        mediaSource = PlexSource(plexToken!!, this)
         serviceScope.launch {
             mediaSource.load()
         }
@@ -408,18 +407,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun isAuthenticated(): Boolean {
-        val accounts = accountManager.getAccountsByType(Authenticator.ACCOUNT_TYPE)
-        if (accounts.isEmpty()) {
+        plexToken = plexUtil.getToken()
+        if(plexToken == null){
             return false
         }
-
-        val token = accountManager.getPassword(accounts[0]).split('|')
-        if (token.size != 2) {
-            accountManager.removeAccountExplicitly(accounts[0])
-            return false
-        }
-        plexToken = token[1]
-        AndroidPlexApi.initPlexApi(this, token[0])
 
         return true
     }

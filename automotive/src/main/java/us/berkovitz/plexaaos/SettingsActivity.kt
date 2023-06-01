@@ -143,9 +143,9 @@ class SettingsActivity : ComponentActivity() {
 
     private fun getServerText(servers: List<MyPlexResource>?, index: Int): String {
         if(servers.isNullOrEmpty() || index > servers.lastIndex){
-            return "Automatic server selection"
+            return "Server: Auto"
         }
-        return servers[index].name
+        return "Server: " + servers[index].name
     }
 
     private suspend fun selectServer(server: MyPlexResource?){

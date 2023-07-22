@@ -568,6 +568,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
             checkInit()
             logger.debug("onPrepare")
             serviceScope.launch {
+                if(currentPlayer.isPlaying){
+                    logger.info("Skipping prepare since already playing")
+                    return@launch
+                }
+
                 val lastSong = AndroidStorage.getLastSong(applicationContext)
                 if (lastSong == null) {
                     logger.warn("Last song not found")
@@ -588,7 +593,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             playWhenReady: Boolean,
             extras: Bundle?
         ) {
-            logger.error("onPrepareFromMediaId: $prepareId")
+            logger.error("onPrepareFromMediaId: $prepareId, $playWhenReady")
             val idSplit = prepareId.split('/')
             if (idSplit.size != 2) {
                 logger.error("media id doesn't include parent id: $prepareId")

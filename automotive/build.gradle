@@ -22,17 +22,19 @@ repositories {
 
 android {
     signingConfigs {
+        Properties properties = new Properties()
+        properties.load(project.rootProject.file('local.properties').newDataInputStream())
         debug {
-            storeFile file('/home/joey/Documents/dev_store.jks')
-            storePassword 'password'
+            storeFile file(properties.getProperty("signing_key_path"))
+            storePassword properties.getProperty("signing_key_password")
             keyAlias 'key0'
-            keyPassword 'password'
+            keyPassword properties.getProperty("signing_key_password")
         }
         release {
-            storeFile file('/home/joey/Documents/dev_store.jks')
-            storePassword 'password'
+            storeFile file(properties.getProperty("signing_key_path"))
+            storePassword properties.getProperty("signing_key_password")
             keyAlias 'key0'
-            keyPassword 'password'
+            keyPassword properties.getProperty("signing_key_password")
         }
     }
     namespace 'us.berkovitz.plexaaos'
@@ -73,7 +75,7 @@ android {
         compose true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion '1.3.0'
+        kotlinCompilerExtensionVersion '1.5.0'
     }
     packagingOptions {
         resources {
@@ -84,26 +86,26 @@ android {
 
 dependencies {
 
-    implementation 'androidx.core:core-ktx:1.9.0'
-    implementation 'androidx.appcompat:appcompat:1.5.1'
+    implementation 'androidx.core:core-ktx:1.10.1'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation project(path: ':shared')
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.5.1'
-    implementation 'androidx.activity:activity-compose:1.6.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.1'
+    implementation 'androidx.activity:activity-compose:1.7.2'
     implementation "androidx.compose.ui:ui:$compose_ui_version"
-    implementation 'androidx.preference:preference:1.2.0'
-    implementation 'com.google.android.material:material:1.4.0'
+    implementation 'androidx.preference:preference-ktx:1.2.0'
+    implementation 'com.google.android.material:material:1.9.0'
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_ui_version"
     implementation "androidx.compose.ui:ui-tooling-preview:$compose_ui_version"
     implementation "androidx.compose.material:material:$compose_ui_version"
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.3'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     androidTestImplementation "androidx.compose.ui:ui-test-junit4:$compose_ui_version"
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_ui_version"
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_ui_version"
 
     implementation 'androidx.media:media:1.6.0'
-    implementation 'us.berkovitz:kotlin-plexapi:0.1.10'
+    implementation 'us.berkovitz:kotlin-plexapi:0.1.11'
 
     api "com.google.android.exoplayer:exoplayer-core:$exoplayer_version"
     api "com.google.android.exoplayer:exoplayer-ui:$exoplayer_version"

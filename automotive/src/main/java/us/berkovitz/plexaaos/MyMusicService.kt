@@ -45,6 +45,8 @@ import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
 import us.berkovitz.plexaaos.library.buildMeta
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.Track
+import kotlin.math.ceil
+import kotlin.math.min
 
 /**
  * This class provides a MediaBrowser through a service. It exposes the media library to a browsing
@@ -100,6 +102,7 @@ const val LOGIN = "us.berkovitz.plexaaos.COMMAND.LOGIN"
 class MyMusicService : MediaBrowserServiceCompat() {
     companion object {
         val logger = PlexLoggerFactory.loggerFor(MyMusicService::class)
+        val PAGE_SIZE = 100
     }
 
     private lateinit var plexUtil: PlexUtil
@@ -334,21 +337,56 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 }
             }
         } else {
-            serviceScope.launch {
-                mediaSource.loadPlaylist(parentMediaId)
+            var playlistId = parentMediaId
+            var pageNum: Int? = null
+            val splitMediaId = parentMediaId.split('/')
+            if(splitMediaId.size == 2){
+                playlistId = splitMediaId[0]
+
+                if(splitMediaId[1].startsWith("page_")){
+                    pageNum = splitMediaId[1].substring(5).toIntOrNull()
+                }
             }
-            resultsSent = mediaSource.playlistWhenReady(parentMediaId) { plist ->
-                if (plist != null) {
+
+
+            serviceScope.launch {
+                mediaSource.loadPlaylist(playlistId)
+            }
+            resultsSent = mediaSource.playlistWhenReady(playlistId) { plist ->
+                if (plist != null && pageNum == null && plist.leafCount > PAGE_SIZE){
+                    val numPages = ceil(plist.leafCount.toDouble() / PAGE_SIZE).toInt()
                     val children = mutableListOf<MediaItem>()
-                    plist.loadedItems().forEach { item ->
+                    logger.info("Sending paginated playlist results: $numPages")
+                    for(i in 0 until numPages){
+                        val start = (i * PAGE_SIZE) + 1
+                        val end = min(((i+1) * PAGE_SIZE), plist.leafCount.toInt())
+                        val id = "${plist.ratingKey}/page_$i"
+
+                        children += MediaItem(
+                            MediaMetadataCompat.Builder()
+                                .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, id)
+                                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "$start - $end")
+                                .build().description,
+                            MediaItem.FLAG_BROWSABLE
+                        )
+                    }
+                    result.sendResult(children)
+                } else if (plist != null) {
+                    val children = mutableListOf<MediaItem>()
+                    var plistItems = plist.loadedItems()
+                    if(pageNum != null){
+                        plistItems = plistItems.sliceArray(IntRange(pageNum * PAGE_SIZE, (pageNum +1) * PAGE_SIZE - 1))
+                    }
+                    plistItems.forEach { item ->
                         if (item !is Track) {
                             return@forEach
                         }
                         children += MediaItem(
-                            (MediaMetadataCompat.Builder().buildMeta(item, parentMediaId)).description,
+                            (MediaMetadataCompat.Builder().buildMeta(item, playlistId)).description,
                             MediaItem.FLAG_PLAYABLE
                         )
                     }
+                    logger.info("Sending playlist results: ${children.size}")
                     result.sendResult(children)
                 } else {
                     mediaSession.sendSessionEvent(NETWORK_FAILURE, null)
@@ -530,6 +568,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
             checkInit()
             logger.debug("onPrepare")
             serviceScope.launch {
+                if(currentPlayer.isPlaying){
+                    logger.info("Skipping prepare since already playing")
+                    return@launch
+                }
+
                 val lastSong = AndroidStorage.getLastSong(applicationContext)
                 if (lastSong == null) {
                     logger.warn("Last song not found")
@@ -550,7 +593,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             playWhenReady: Boolean,
             extras: Bundle?
         ) {
-            logger.error("onPrepareFromMediaId: $prepareId")
+            logger.error("onPrepareFromMediaId: $prepareId, $playWhenReady")
             val idSplit = prepareId.split('/')
             if (idSplit.size != 2) {
                 logger.error("media id doesn't include parent id: $prepareId")

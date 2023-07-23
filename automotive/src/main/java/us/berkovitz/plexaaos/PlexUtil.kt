@@ -1,11 +1,15 @@
 package us.berkovitz.plexaaos
 
+import android.accounts.Account
 import android.accounts.AccountManager
 import android.content.Context
+import android.os.Bundle
 import us.berkovitz.plexaaos.library.PlexSource
+import us.berkovitz.plexapi.config.Config
 import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.MyPlexAccount
 import us.berkovitz.plexapi.myplex.MyPlexResource
+import us.berkovitz.plexapi.myplex.MyPlexUser
 
 class PlexUtil(private val ctx: Context) {
     private var accountManager = AccountManager.get(ctx)
@@ -25,6 +29,15 @@ class PlexUtil(private val ctx: Context) {
         return token[1]
     }
 
+    fun setToken(token: String) {
+        val account = Account(
+            "PlexAAOS", //TODO: get account username from login???
+            Authenticator.ACCOUNT_TYPE
+        )
+        val finalToken = Config.X_PLEX_IDENTIFIER + "|" + token
+        accountManager.setPassword(account, finalToken)
+    }
+
     companion object {
         suspend fun getServers(token: String): List<MyPlexResource> {
             val plexAccount = MyPlexAccount(token)
@@ -38,6 +51,16 @@ class PlexUtil(private val ctx: Context) {
                 }
                 return@filter false
             }
+        }
+
+        suspend fun getUsers(token: String): List<MyPlexUser> {
+            val plexAccount = MyPlexAccount(token)
+            return plexAccount.users().toList()
+        }
+
+        suspend fun switchUser(token: String, userId: String, pin: String?): String {
+            val plexAccount = MyPlexAccount(token)
+            return plexAccount.switchUser(userId, pin)
         }
     }
 }

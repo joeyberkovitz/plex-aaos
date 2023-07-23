@@ -97,6 +97,7 @@ import kotlin.math.min
  */
 
 const val LOGIN = "us.berkovitz.plexaaos.COMMAND.LOGIN"
+const val REFRESH = "us.berkovitz.plexaaos.COMMAND.REFRESH"
 
 
 class MyMusicService : MediaBrowserServiceCompat() {
@@ -163,6 +164,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         ): Boolean =
             when (command) {
                 LOGIN -> loginCommand(extras ?: Bundle.EMPTY, callback)
+                REFRESH -> refreshCommand(extras ?: Bundle.EMPTY, callback)
                 //LOGOUT -> logoutCommand(extras ?: Bundle.EMPTY, callback)
                 else -> false
             }
@@ -256,8 +258,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         checkInit()
     }
 
-    fun checkInit() {
-        if (this::mediaSource.isInitialized) {
+    fun checkInit(force: Boolean = false) {
+        if (this::mediaSource.isInitialized && !force) {
             return
         }
         // The media library is built from a remote JSON file. We'll create the source here,
@@ -265,6 +267,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         mediaSource = PlexSource(plexToken!!, this)
         serviceScope.launch {
             mediaSource.load()
+        }
+
+        if (force) {
+            browseTree.updateMusicSource(mediaSource)
         }
     }
 
@@ -305,11 +311,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentMediaId: String, result: Result<List<MediaItem>>) {
-        logger.info( "onLoadChildren: $parentMediaId")
+        logger.info("onLoadChildren: $parentMediaId")
 
         if (!isAuthenticated()) {
             result.sendResult(null)
-            logger.info( "not authenticated")
+            logger.info("not authenticated")
             return
         }
         checkInit()
@@ -340,10 +346,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
             var playlistId = parentMediaId
             var pageNum: Int? = null
             val splitMediaId = parentMediaId.split('/')
-            if(splitMediaId.size == 2){
+            if (splitMediaId.size == 2) {
                 playlistId = splitMediaId[0]
 
-                if(splitMediaId[1].startsWith("page_")){
+                if (splitMediaId[1].startsWith("page_")) {
                     pageNum = splitMediaId[1].substring(5).toIntOrNull()
                 }
             }
@@ -353,13 +359,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 mediaSource.loadPlaylist(playlistId)
             }
             resultsSent = mediaSource.playlistWhenReady(playlistId) { plist ->
-                if (plist != null && pageNum == null && plist.leafCount > PAGE_SIZE){
+                if (plist != null && pageNum == null && plist.leafCount > PAGE_SIZE) {
                     val numPages = ceil(plist.leafCount.toDouble() / PAGE_SIZE).toInt()
                     val children = mutableListOf<MediaItem>()
                     logger.info("Sending paginated playlist results: $numPages")
-                    for(i in 0 until numPages){
+                    for (i in 0 until numPages) {
                         val start = (i * PAGE_SIZE) + 1
-                        val end = min(((i+1) * PAGE_SIZE), plist.leafCount.toInt())
+                        val end = min(((i + 1) * PAGE_SIZE), plist.leafCount.toInt())
                         val id = "${plist.ratingKey}/page_$i"
 
                         children += MediaItem(
@@ -374,8 +380,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 } else if (plist != null) {
                     val children = mutableListOf<MediaItem>()
                     var plistItems = plist.loadedItems()
-                    if(pageNum != null){
-                        plistItems = plistItems.sliceArray(IntRange(pageNum * PAGE_SIZE, (pageNum +1) * PAGE_SIZE - 1))
+                    if (pageNum != null) {
+                        plistItems = plistItems.sliceArray(
+                            IntRange(
+                                pageNum * PAGE_SIZE,
+                                (pageNum + 1) * PAGE_SIZE - 1
+                            )
+                        )
                     }
                     plistItems.forEach { item ->
                         if (item !is Track) {
@@ -404,15 +415,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (!resultsSent) {
             result.detach()
         }
-    }
-
-    private fun isAuthenticated(): Boolean {
-        plexToken = plexUtil.getToken()
-        if(plexToken == null){
-            return false
-        }
-
-        return true
     }
 
     private fun requireLogin() {
@@ -445,7 +447,35 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
+    private fun isAuthenticated(): Boolean {
+        plexToken = plexUtil.getToken()
+        if (plexToken == null) {
+            return false
+        }
+
+        return true
+    }
+
     fun loginCommand(extras: Bundle, callback: ResultReceiver?): Boolean {
+        return refreshCommand(extras, callback, true)
+    }
+
+    fun refreshCommand(
+        extras: Bundle?,
+        callback: ResultReceiver?,
+        login: Boolean = false
+    ): Boolean {
+        isAuthenticated()
+        checkInit(!login)
+        if (login) {
+            mediaSource.whenReady {
+                serviceScope.launch {
+                    delay(500L)
+                    callback?.send(Activity.RESULT_OK, Bundle.EMPTY)
+                }
+            }
+        }
+
         // Updated state (including clearing the error) now that the user has logged in.
         mediaSession.setPlaybackState(
             PlaybackStateCompat.Builder()
@@ -457,14 +487,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         mediaSessionConnector.invalidateMediaSessionMetadata()
         mediaSessionConnector.invalidateMediaSessionQueue()
         this.notifyChildrenChanged(UAMP_BROWSABLE_ROOT)
-        isAuthenticated()
-        checkInit()
-        mediaSource.whenReady {
-            serviceScope.launch {
-                delay(500L)
-                callback?.send(Activity.RESULT_OK, Bundle.EMPTY)
-            }
-        }
         return true
     }
 
@@ -568,7 +590,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             checkInit()
             logger.debug("onPrepare")
             serviceScope.launch {
-                if(currentPlayer.isPlaying){
+                if (currentPlayer.isPlaying) {
                     logger.info("Skipping prepare since already playing")
                     return@launch
                 }
@@ -653,11 +675,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onPrepareFromSearch(query: String, playWhenReady: Boolean, extras: Bundle?) {
-            logger.error( "onPrepareFromSearch: $query")
+            logger.error("onPrepareFromSearch: $query")
         }
 
         override fun onPrepareFromUri(uri: Uri, playWhenReady: Boolean, extras: Bundle?) {
-            logger.error( "onPrepareFromUri: $uri")
+            logger.error("onPrepareFromUri: $uri")
         }
 
         override fun onCommand(
@@ -710,7 +732,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onPlayerError(error: PlaybackException) {
             var message = "player error";
-            logger.error( "Player error: " + error.errorCodeName + " (" + error.errorCode + ")");
+            logger.error("Player error: " + error.errorCodeName + " (" + error.errorCode + ")");
             if (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
                 || error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
             ) {
@@ -724,9 +746,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun saveLastSong(){
-        if(!active || currentPlayer.mediaItemCount == 0) {
-            if(wasActive) {
+    private fun saveLastSong() {
+        if (!active || currentPlayer.mediaItemCount == 0) {
+            if (wasActive) {
                 serviceScope.launch {
                     //logger.info("Set last position to previous $previousPosition")
                     AndroidStorage.setLastPosition(previousPosition, applicationContext)
@@ -749,7 +771,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     //logger.info("Setting last song: ${id}")
                     AndroidStorage.setLastSong(id, applicationContext)
                     //logger.info("Set last position ${currentPlayer.currentPosition}")
-                    AndroidStorage.setLastPosition(currentPlayer.currentPosition, applicationContext)
+                    AndroidStorage.setLastPosition(
+                        currentPlayer.currentPosition,
+                        applicationContext
+                    )
                 }
             }
         }

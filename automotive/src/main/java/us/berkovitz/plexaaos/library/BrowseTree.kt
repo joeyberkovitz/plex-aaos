@@ -50,7 +50,7 @@ import us.berkovitz.plexapi.media.Track
  */
 class BrowseTree(
     val context: Context,
-    val musicSource: MusicSource,
+    var musicSource: MusicSource,
     val recentMediaId: String? = null
 ) {
     private val mediaIdToChildren = mutableMapOf<String, MutableList<MediaMetadataCompat>>()
@@ -64,6 +64,16 @@ class BrowseTree(
      * TODO: Expand to allow more browsing types.
      */
     init {
+        reset()
+    }
+
+    fun updateMusicSource(newMusicSource: MusicSource) {
+        this.musicSource = newMusicSource
+        reset()
+    }
+
+    fun reset() {
+        mediaIdToChildren.clear()
         val rootList = mediaIdToChildren[UAMP_BROWSABLE_ROOT] ?: mutableListOf()
 
         val playlistsMetadata = MediaMetadataCompat.Builder().apply {
@@ -79,7 +89,7 @@ class BrowseTree(
         refresh()
     }
 
-    fun refresh(){
+    fun refresh() {
         musicSource.forEach { playlist ->
             val playlistId = playlist.ratingKey.toString()
             val playlistChildren = mediaIdToChildren[playlistId] ?: buildPlaylistRoot(playlist)
@@ -155,13 +165,13 @@ fun MediaMetadataCompat.Builder.from(
         mediaItem.thumb
     } else if (!mediaItem.parentThumb.isNullOrEmpty()) {
         mediaItem.parentThumb
-    } else if(!mediaItem.grandparentThumb.isNullOrEmpty()) {
+    } else if (!mediaItem.grandparentThumb.isNullOrEmpty()) {
         mediaItem.grandparentThumb
     } else {
         null
     }
 
-    if( iconUrl != null ) {
+    if (iconUrl != null) {
         iconUrl = mediaItem._server!!.urlFor(iconUrl)
         iconUrl = AlbumArtContentProvider.mapUri(Uri.parse(iconUrl)).toString()
     }

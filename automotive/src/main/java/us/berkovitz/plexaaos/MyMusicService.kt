@@ -45,6 +45,7 @@ import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
 import us.berkovitz.plexaaos.library.buildMeta
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.Track
+import us.berkovitz.plexapi.myplex.AuthorizationException
 import kotlin.math.ceil
 import kotlin.math.min
 
@@ -266,7 +267,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         // and then use a suspend function to perform the download off the main thread.
         mediaSource = PlexSource(plexToken!!, this)
         serviceScope.launch {
-            mediaSource.load()
+            try {
+                mediaSource.load()
+            } catch (exc: AuthorizationException){
+                plexUtil.clearToken()
+                requireLogin()
+            } catch (exc: Exception) {
+                logger.error("error occurred while loading media source: ${exc.message} ${exc.stackTraceToString()}")
+            }
         }
 
         if (force) {
@@ -324,7 +332,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (parentMediaId == UAMP_PLAYLISTS_ROOT || parentMediaId == UAMP_BROWSABLE_ROOT) {
             if (parentMediaId == UAMP_BROWSABLE_ROOT) {
                 serviceScope.launch {
-                    mediaSource.load()
+                    try {
+                        mediaSource.load()
+                    } catch (exc: AuthorizationException){
+                        plexUtil.clearToken()
+                        requireLogin()
+                    } catch (exc: Exception) {
+                        logger.error("error occurred while loading media source: ${exc.message} ${exc.stackTraceToString()}")
+                    }
                 }
             }
             // If the media source is ready, the results will be set synchronously here.
@@ -356,7 +371,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
 
             serviceScope.launch {
-                mediaSource.loadPlaylist(playlistId)
+                try {
+                    mediaSource.loadPlaylist(playlistId)
+                } catch (exc: AuthorizationException){
+                    plexUtil.clearToken()
+                    requireLogin()
+                } catch (exc: Exception) {
+                    logger.error("error occurred while loading playlist ${playlistId}: ${exc.message} ${exc.stackTraceToString()}")
+                }
             }
             resultsSent = mediaSource.playlistWhenReady(playlistId) { plist ->
                 if (plist != null && pageNum == null && plist.leafCount > PAGE_SIZE) {

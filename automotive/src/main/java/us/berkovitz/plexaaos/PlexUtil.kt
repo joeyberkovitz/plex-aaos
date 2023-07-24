@@ -38,6 +38,14 @@ class PlexUtil(private val ctx: Context) {
         accountManager.setPassword(account, finalToken)
     }
 
+    fun clearToken() {
+        val account = Account(
+            "PlexAAOS", //TODO: get account username from login???
+            Authenticator.ACCOUNT_TYPE
+        )
+        accountManager.removeAccountExplicitly(account)
+    }
+
     companion object {
         suspend fun getServers(token: String): List<MyPlexResource> {
             val plexAccount = MyPlexAccount(token)

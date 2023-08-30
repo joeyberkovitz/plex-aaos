@@ -36,6 +36,7 @@ import us.berkovitz.plexaaos.extensions.displaySubtitle
 import us.berkovitz.plexaaos.extensions.displayTitle
 import us.berkovitz.plexaaos.extensions.flag
 import us.berkovitz.plexaaos.extensions.id
+import us.berkovitz.plexaaos.extensions.title
 import us.berkovitz.plexaaos.extensions.toMediaItem
 import us.berkovitz.plexaaos.library.BrowseTree
 import us.berkovitz.plexaaos.library.MusicSource
@@ -346,7 +347,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             resultsSent = mediaSource.whenReady { successfullyInitialized ->
                 if (successfullyInitialized) {
                     browseTree.refresh()
-                    val children = browseTree[parentMediaId]?.map { item ->
+                    val children = browseTree[parentMediaId]?.sortedBy { item -> item.title }?.map { item ->
                         MediaItem(item.description, item.flag)
                     } ?: listOf()
                     logger.info("Sending ${children.size} results for $parentMediaId")

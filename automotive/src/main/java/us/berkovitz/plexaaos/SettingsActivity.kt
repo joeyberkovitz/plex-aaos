@@ -193,7 +193,11 @@ class SettingsActivity : ComponentActivity() {
         if (users.isNullOrEmpty() || index < 0 || index > users.lastIndex) {
             return "Select a user to switch accounts"
         }
-        return users[index].username
+        if(users[index].username != null) {
+            return users[index].username!!
+        }
+
+        return users[index].title
     }
 
     private suspend fun switchUser(user: MyPlexUser, pin: String?): String {
@@ -268,7 +272,7 @@ class SettingsActivity : ComponentActivity() {
                             switchingUser = false
                             errorMessage = ""
                         }) {
-                            Text(text = user.username)
+                            Text(text = getUserText(users, index))
                         }
                     }
                 }

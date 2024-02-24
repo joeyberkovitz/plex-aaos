@@ -131,6 +131,23 @@ fun MediaMetadataCompat.Builder.from(playlist: Playlist): MediaMetadataCompat.Bu
         duration = playlist.duration
     }
 
+    var iconUrl = if (!playlist.composite.isNullOrEmpty()) {
+        playlist.composite
+    } else {
+        null
+    }
+
+    if (iconUrl != null) {
+        iconUrl = playlist.getServer()!!.urlFor(iconUrl)
+        iconUrl = AlbumArtContentProvider.mapUri(Uri.parse(iconUrl)).toString()
+    }
+
+
+    // To make things easier for *displaying* these, set the display properties as well.
+    displayIconUri = iconUrl
+    albumArtUri = iconUrl
+
+
     // To make things easier for *displaying* these, set the display properties as well.
     displayTitle = playlist.title
 

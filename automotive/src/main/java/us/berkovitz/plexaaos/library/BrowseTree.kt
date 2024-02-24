@@ -131,7 +131,8 @@ fun MediaMetadataCompat.Builder.from(playlist: Playlist): MediaMetadataCompat.Bu
         duration = playlist.duration
     }
 
-    var iconUrl = if (!playlist.composite.isNullOrEmpty()) {
+    // entries with 'icon' set are always bad URLs
+    var iconUrl = if (!playlist.composite.isNullOrEmpty() && playlist.icon.isNullOrEmpty()) {
         playlist.composite
     } else {
         null

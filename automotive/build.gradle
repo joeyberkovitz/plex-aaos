@@ -38,14 +38,14 @@ android {
         }
     }
     namespace 'us.berkovitz.plexaaos'
-    compileSdk 33
+    compileSdk 35
 
     defaultConfig {
         applicationId "us.berkovitz.plexaaos"
         minSdk 29
-        targetSdk 33
-        versionCode 27
-        versionName "0.6.2"
+        targetSdk 35
+        versionCode 28
+        versionName "0.6.3"
 
         buildFeatures {
             buildConfig = true

@@ -19,6 +19,7 @@
         android:required="false" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.GET_ACCOUNTS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
@@ -61,6 +62,7 @@
         -->
         <service
             android:name=".MyMusicService"
+            android:foregroundServiceType="mediaPlayback"
             android:exported="true"
             tools:ignore="ExportedService">
             <intent-filter>

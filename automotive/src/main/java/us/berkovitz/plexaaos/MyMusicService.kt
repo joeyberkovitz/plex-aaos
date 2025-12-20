@@ -674,34 +674,66 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     /**
-     * Prefetch next N tracks using ExoPlayer's DownloadManager
+     * Prefetch next N tracks using ExoPlayer's DownloadManager.
+     * Respects shuffle mode by using the player's timeline to determine the actual next tracks.
      */
     private fun prefetchNextTracks(
         metadataList: List<MediaMetadataCompat>,
         currentIndex: Int,
         count: Int = 5
     ) {
-        if (metadataList.isEmpty()) return
-        val start = currentIndex + 1
-        val end = min(metadataList.size - 1, currentIndex + count)
-        if (start > end) return
+        if (metadataList.isEmpty() || !this::currentPlayer.isInitialized) return
 
-        for (i in start..end) {
-            val meta = metadataList[i]
-            val uri = meta.description.mediaUri ?: continue
-            val id = meta.description.mediaId ?: uri.toString()
+        val timeline = currentPlayer.currentTimeline
+        if (timeline.isEmpty) return
 
-            try {
-//                logger.info("Downloading $id uri=$uri")
-                // Create download request for the track
-                val downloadRequest = DownloadRequest.Builder(id, uri)
-                    .build()
+        val currentWindowIndex = currentPlayer.currentMediaItemIndex
+        val indicesToPrefetch = mutableListOf<Int>()
 
-                // Add to download manager (it will cache the content)
-                downloadManager.addDownload(downloadRequest)
-                downloadManager.resumeDownloads()
-            } catch (e: Exception) {
-                logger.error("Failed to add download for $id: ${e.message}")
+        // Get the next N windows in playback order (respects shuffle mode)
+        var nextWindowIndex = timeline.getNextWindowIndex(
+            currentWindowIndex,
+            currentPlayer.repeatMode,
+            currentPlayer.shuffleModeEnabled
+        )
+
+        var remaining = count
+        while (nextWindowIndex != C.INDEX_UNSET && remaining > 0) {
+            indicesToPrefetch.add(nextWindowIndex)
+            remaining--
+
+            // Get the next window after this one
+            nextWindowIndex = timeline.getNextWindowIndex(
+                nextWindowIndex,
+                currentPlayer.repeatMode,
+                currentPlayer.shuffleModeEnabled
+            )
+
+            // Prevent infinite loop in case of repeat mode
+            if (indicesToPrefetch.size >= min(count, timeline.windowCount)) {
+                break
+            }
+        }
+
+        // Prefetch the tracks in the order they will actually play
+        for (windowIndex in indicesToPrefetch) {
+            if (windowIndex >= 0 && windowIndex < metadataList.size) {
+                val meta = metadataList[windowIndex]
+                val uri = meta.description.mediaUri ?: continue
+                val id = meta.description.mediaId ?: uri.toString()
+
+                try {
+                    // Create download request for the track
+                    val downloadRequest = DownloadRequest.Builder(id, uri)
+                        .build()
+
+                    // Add to download manager (it will cache the content)
+                    downloadManager.addDownload(downloadRequest)
+                    downloadManager.resumeDownloads()
+                    logger.debug("Prefetching track at index $windowIndex: $id (shuffle: ${currentPlayer.shuffleModeEnabled})")
+                } catch (e: Exception) {
+                    logger.error("Failed to add download for $id: ${e.message}")
+                }
             }
         }
     }

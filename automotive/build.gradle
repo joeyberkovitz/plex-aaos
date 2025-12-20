@@ -3,6 +3,7 @@ plugins {
     id 'org.jetbrains.kotlin.android'
     id 'com.google.gms.google-services'
     id 'com.google.firebase.crashlytics'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 repositories {
@@ -24,26 +25,20 @@ android {
     signingConfigs {
         Properties properties = new Properties()
         properties.load(project.rootProject.file('local.properties').newDataInputStream())
-        debug {
-            storeFile file(properties.getProperty("signing_key_path"))
-            storePassword properties.getProperty("signing_key_password")
-            keyAlias 'key0'
-            keyPassword properties.getProperty("signing_key_password")
-        }
         release {
             storeFile file(properties.getProperty("signing_key_path"))
             storePassword properties.getProperty("signing_key_password")
-            keyAlias 'key0'
+            keyAlias properties.getProperty("signing_key_alias")
             keyPassword properties.getProperty("signing_key_password")
         }
     }
     namespace 'us.berkovitz.plexaaos'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "us.berkovitz.plexaaos"
         minSdk 29
-        targetSdk 35
+        targetSdk 36
         versionCode 28
         versionName "0.6.3"
 
@@ -65,11 +60,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
     buildFeatures {
         compose true

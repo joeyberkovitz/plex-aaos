@@ -498,12 +498,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     val children = mutableListOf<MediaItem>()
                     var plistItems = plist.loadedItems()
                     if (pageNum != null) {
-                        plistItems = plistItems.sliceArray(
-                            IntRange(
-                                pageNum * PAGE_SIZE,
-                                (pageNum + 1) * PAGE_SIZE - 1
-                            )
-                        )
+                        val totalItems = plistItems.size
+                        val startIndex = pageNum * PAGE_SIZE
+                        val endExclusive = min((pageNum + 1) * PAGE_SIZE, totalItems)
+
+                        plistItems = if (startIndex >= totalItems) {
+                            emptyArray()
+                        } else {
+                            plistItems.sliceArray(IntRange(startIndex, endExclusive - 1))
+                        }
                     }
                     plistItems.forEach { item ->
                         if (item !is Track) {

@@ -10,6 +10,8 @@ object AndroidStorage {
     private const val SERVER = "server"
     private const val LAST_MEDIA_ID = "last_media_id"
     private const val LAST_POSITION = "last_position"
+    private const val SHUFFLE_ENABLED = "shuffle_enabled"
+    private const val REPEAT_MODE = "repeat_mode"
 
     suspend fun getKey(key: String, context: Context): String? {
         return withContext(Dispatchers.IO) {
@@ -46,6 +48,22 @@ object AndroidStorage {
 
     suspend fun setLastPosition(position: Long, context: Context){
         return setKey(LAST_POSITION, position.toString(), context)
+    }
+
+    suspend fun getShuffleEnabled(context: Context): Boolean {
+        return getKey(SHUFFLE_ENABLED, context)?.toBoolean() ?: false
+    }
+
+    suspend fun setShuffleEnabled(value: Boolean, context: Context){
+        return setKey(SHUFFLE_ENABLED, value.toString(), context)
+    }
+
+    suspend fun getRepeatMode(context: Context): Int {
+        return getKey(REPEAT_MODE, context)?.toIntOrNull() ?: 0
+    }
+
+    suspend fun setRepeatMode(value: Int, context: Context){
+        return setKey(REPEAT_MODE, value.toString(), context)
     }
 
     suspend fun getServer(context: Context): String? {

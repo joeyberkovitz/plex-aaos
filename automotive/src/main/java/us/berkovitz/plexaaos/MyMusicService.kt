@@ -283,6 +283,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 object : CustomActionProvider {
                     override fun onCustomAction(player: Player, action: String, extras: Bundle?) {
                         player.shuffleModeEnabled = !player.shuffleModeEnabled
+                        serviceScope.launch {
+                            AndroidStorage.setShuffleEnabled( player.shuffleModeEnabled, applicationContext)
+                        }
                     }
 
                     override fun getCustomAction(player: Player): PlaybackStateCompat.CustomAction {
@@ -302,6 +305,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                             Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_OFF
                             else -> Player.REPEAT_MODE_OFF
+                        }
+                        serviceScope.launch {
+                            AndroidStorage.setRepeatMode( player.repeatMode, applicationContext)
                         }
                     }
 
@@ -327,6 +333,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
             previousPlayer = null,
             newPlayer = exoPlayer
         )
+
+        serviceScope.launch {
+            // load shuffle/repeat modes from storage
+            val shuffleMode = AndroidStorage.getShuffleEnabled(applicationContext)
+            val repeatMode = AndroidStorage.getRepeatMode(applicationContext)
+            currentPlayer.shuffleModeEnabled = shuffleMode
+            currentPlayer.repeatMode = repeatMode
+        }
 
         // Register to handle login/logout commands.
         mediaSessionConnector.registerCustomCommandReceiver(AutomotiveCommandReceiver())

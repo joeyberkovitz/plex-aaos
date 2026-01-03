@@ -1,3 +1,5 @@
+@UnstableApi
+
 package us.berkovitz.plexaaos
 
 import android.app.Activity
@@ -15,11 +17,27 @@ import android.util.Log
 import android.widget.Toast
 import androidx.media.MediaBrowserServiceCompat
 import androidx.media.utils.MediaConstants
-import com.google.android.exoplayer2.C
-import com.google.android.exoplayer2.ExoPlayer
-import com.google.android.exoplayer2.PlaybackException
-import com.google.android.exoplayer2.Player
-import com.google.android.exoplayer2.audio.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.Cache
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.offline.Download
+import androidx.media3.exoplayer.offline.DownloadManager
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.MediaConstants.EXTRAS_KEY_ERROR_RESOLUTION_ACTION_INTENT_COMPAT
+import androidx.media3.session.MediaConstants.EXTRAS_KEY_ERROR_RESOLUTION_ACTION_LABEL_COMPAT
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.google.android.exoplayer2.database.StandaloneDatabaseProvider
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector.CustomActionProvider
@@ -28,11 +46,13 @@ import com.google.android.exoplayer2.offline.DownloadManager
 import com.google.android.exoplayer2.offline.DownloadRequest
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
-import com.google.android.exoplayer2.upstream.cache.Cache
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource
 import com.google.android.exoplayer2.upstream.cache.LeastRecentlyUsedCacheEvictor
 import com.google.android.exoplayer2.upstream.cache.SimpleCache
 import com.google.android.exoplayer2.util.Util
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import java.io.File
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
@@ -108,7 +128,7 @@ const val REFRESH = "us.berkovitz.plexaaos.COMMAND.REFRESH"
 const val LOGOUT = "us.berkovitz.plexaaos.COMMAND.LOGOUT"
 
 
-class MyMusicService : MediaBrowserServiceCompat() {
+class MyMusicService : MediaLibraryService() {
     companion object {
         val logger = PlexLoggerFactory.loggerFor(MyMusicService::class)
         val PAGE_SIZE = 100
@@ -124,8 +144,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
 
-    private lateinit var mediaSession: MediaSessionCompat
-    private lateinit var mediaSessionConnector: MediaSessionConnector
+    private lateinit var mediaSession: MediaSession
+    private lateinit var mediaLibrarySession: MediaLibrarySession
     private var currentPlaylistItems: List<MediaMetadataCompat> = emptyList()
     private var currentMediaItemIndex: Int = 0
 
@@ -145,31 +165,37 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private val downloadListener = object : DownloadManager.Listener {
         override fun onDownloadChanged(
             downloadManager: DownloadManager,
-            download: com.google.android.exoplayer2.offline.Download,
+            download: Download,
             finalException: Exception?
         ) {
             val logger = PlexLoggerFactory.loggerFor(android.app.DownloadManager::class)
             when (download.state) {
-                com.google.android.exoplayer2.offline.Download.STATE_COMPLETED -> {
+                Download.STATE_COMPLETED -> {
                     logger.debug("Download completed: ${download.request.id}")
                 }
-                com.google.android.exoplayer2.offline.Download.STATE_FAILED -> {
+
+                Download.STATE_FAILED -> {
                     logger.error("Download failed: ${download.request.id}, error: ${finalException?.message}")
                 }
-                com.google.android.exoplayer2.offline.Download.STATE_DOWNLOADING -> {
+
+                Download.STATE_DOWNLOADING -> {
                     val progress = download.percentDownloaded
                     logger.debug("Downloading: ${download.request.id}, progress: $progress%")
                 }
-                com.google.android.exoplayer2.offline.Download.STATE_QUEUED -> {
+
+                Download.STATE_QUEUED -> {
                     logger.debug("Download queued: ${download.request.id}")
                 }
-                com.google.android.exoplayer2.offline.Download.STATE_REMOVING -> {
+
+                Download.STATE_REMOVING -> {
                     logger.debug("Download removing: ${download.request.id}")
                 }
-                com.google.android.exoplayer2.offline.Download.STATE_RESTARTING -> {
+
+                Download.STATE_RESTARTING -> {
                     logger.debug("Download restarting: ${download.request.id}")
                 }
-                com.google.android.exoplayer2.offline.Download.STATE_STOPPED -> {
+
+                Download.STATE_STOPPED -> {
                     logger.debug("Download stopped: ${download.request.id}")
                 }
             }
@@ -177,7 +203,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onDownloadRemoved(
             downloadManager: DownloadManager,
-            download: com.google.android.exoplayer2.offline.Download
+            download: Download
         ) {
             logger.debug("Download removed: ${download.request.id}")
         }
@@ -220,37 +246,84 @@ class MyMusicService : MediaBrowserServiceCompat() {
      * Configure ExoPlayer to handle audio focus for us and use cache for playback.
      * See [Player.AudioComponent.setAudioAttributes] for details.
      */
-    private val exoPlayer: ExoPlayer by lazy {
+    private val exoPlayer: PlexPlayer by lazy {
         val cacheDataSourceFactory = CacheDataSource.Factory()
             .setCache(downloadCache)
             .setUpstreamDataSourceFactory(DefaultHttpDataSource.Factory())
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
-        ExoPlayer.Builder(this)
-            .setMediaSourceFactory(
-                com.google.android.exoplayer2.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
-            )
-            .build().apply {
-                setAudioAttributes(playerAudioAttributes, true)
-                setHandleAudioBecomingNoisy(true)
-                addListener(playerListener)
-                repeatMode = Player.REPEAT_MODE_ALL
-            }
+        PlexPlayer(
+            ExoPlayer.Builder(this)
+                .setMediaSourceFactory(
+                    DefaultMediaSourceFactory(cacheDataSourceFactory)
+                )
+                .build().apply {
+                    setAudioAttributes(playerAudioAttributes, true)
+                    setHandleAudioBecomingNoisy(true)
+                    addListener(playerListener)
+                    repeatMode = Player.REPEAT_MODE_ALL
+                }
+        )
     }
 
-    private inner class AutomotiveCommandReceiver : MediaSessionConnector.CommandReceiver {
-        override fun onCommand(
-            player: Player,
-            command: String,
-            extras: Bundle?,
-            callback: ResultReceiver?
-        ): Boolean =
-            when (command) {
-                LOGIN -> loginCommand(extras ?: Bundle.EMPTY, callback)
-                REFRESH -> refreshCommand(extras ?: Bundle.EMPTY, callback)
-                LOGOUT -> logoutCommand(callback)
-                else -> false
+    private inner class AutomotiveCallback : MediaLibrarySession.Callback {
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle
+        ): ListenableFuture<SessionResult> {
+            val future = SettableFuture.create<SessionResult>()
+            when (customCommand.customAction) {
+                LOGIN -> loginCommand(future)
+                REFRESH -> refreshCommand(future)
+                else -> return Futures.immediateFuture(
+                    SessionResult(
+                        SessionResult.RESULT_ERROR_SESSION_AUTHENTICATION_EXPIRED,
+                        getExpiredAuthenticationResolutionExtras()
+                    )
+                )
             }
+            return future
+        }
+
+//        override fun onConnect(
+//            session: MediaSession,
+//            controller: MediaSession.ControllerInfo
+//        ): MediaSession.ConnectionResult {
+//            val connectionResult = super.onConnect(session, controller)
+//            val availableSessionCommands = connectionResult.availableSessionCommands.buildUpon()
+//            customCommands.forEach { commandButton ->
+//                // Add custom command to available session commands.
+//                commandButton.sessionCommand?.let { availableSessionCommands.add(it) }
+//            }
+//            return MediaSession.ConnectionResult.accept(
+//                availableSessionCommands.build(),
+//                connectionResult.availablePlayerCommands
+//            )
+//        }
+//
+//        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+//            if (!customLayout.isEmpty()) {
+//                // Let the controller now about the custom layout right after it connected.
+//                mediaLibrarySession.setCustomLayout(controller, customLayout)
+//            }
+//        }
+    }
+
+    private fun getExpiredAuthenticationResolutionExtras(): Bundle {
+        return Bundle().also {
+            it.putString(
+                EXTRAS_KEY_ERROR_RESOLUTION_ACTION_LABEL_COMPAT,
+                getString(R.string.error_login_button)
+            )
+            val signInIntent = Intent(this, LoginActivity::class.java)
+            val flags = PendingIntent.FLAG_IMMUTABLE
+            it.putParcelable(
+                EXTRAS_KEY_ERROR_RESOLUTION_ACTION_INTENT_COMPAT,
+                PendingIntent.getActivity(this, /* requestCode= */ 0, signInIntent, flags)
+            )
+        }
     }
 
 
@@ -266,18 +339,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     this, 0, sessionIntent,
                     PendingIntent.FLAG_IMMUTABLE
                 )
-            }
+            }!!
 
         // Create a new MediaSession.
-        mediaSession = MediaSessionCompat(this, "MyMusicService")
+        mediaSession = MediaSession.Builder(this, exoPlayer)
             .apply {
                 setSessionActivity(sessionActivityPendingIntent)
-                isActive = true
-            }
-        sessionToken = mediaSession.sessionToken
+            }.build()
+
+        mediaLibrarySession =
+            MediaLibrarySession.Builder(this, exoPlayer, AutomotiveCallback()).build()
+        // mediaLibrarySession.setCustomLayout(customLayout)
 
         // ExoPlayer will manage the MediaSession for us.
-        mediaSessionConnector = MediaSessionConnector(mediaSession).apply {
+        /*mediaSessionConnector = MediaSessionConnector(mediaSession).apply {
             setPlaybackPreparer(UampPlaybackPreparer())
             setQueueNavigator(UampQueueNavigator(mediaSession))
             setCustomActionProviders(
@@ -329,7 +404,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
             )
         }
-
+*/
         switchToPlayer(
             previousPlayer = null,
             newPlayer = exoPlayer
@@ -342,9 +417,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
             currentPlayer.shuffleModeEnabled = shuffleMode
             currentPlayer.repeatMode = repeatMode
         }
-
-        // Register to handle login/logout commands.
-        mediaSessionConnector.registerCustomCommandReceiver(AutomotiveCommandReceiver())
 
         if (!isAuthenticated()) {
             logger.info("Not logged in")
@@ -365,7 +437,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         serviceScope.launch {
             try {
                 mediaSource.load()
-            } catch (exc: AuthorizationException){
+            } catch (exc: AuthorizationException) {
                 plexUtil.clearToken()
                 requireLogin()
             } catch (exc: Exception) {
@@ -444,7 +516,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 serviceScope.launch {
                     try {
                         mediaSource.load()
-                    } catch (exc: AuthorizationException){
+                    } catch (exc: AuthorizationException) {
                         plexUtil.clearToken()
                         requireLogin()
                     } catch (exc: Exception) {
@@ -456,9 +528,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
             resultsSent = mediaSource.whenReady { successfullyInitialized ->
                 if (successfullyInitialized) {
                     browseTree.refresh()
-                    val children = browseTree[parentMediaId]?.sortedBy { item -> item.title }?.map { item ->
-                        MediaItem(item.description, item.flag)
-                    } ?: listOf()
+                    val children =
+                        browseTree[parentMediaId]?.sortedBy { item -> item.title }?.map { item ->
+                            MediaItem(item.description, item.flag)
+                        } ?: listOf()
                     logger.info("Sending ${children.size} results for $parentMediaId")
                     result.sendResult(children)
                 } else {
@@ -483,7 +556,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             serviceScope.launch {
                 try {
                     mediaSource.loadPlaylist(playlistId)
-                } catch (exc: AuthorizationException){
+                } catch (exc: AuthorizationException) {
                     plexUtil.clearToken()
                     requireLogin()
                 } catch (exc: Exception) {
@@ -570,15 +643,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 loginActivityPendingIntent
             )
         }
-        mediaSession.setPlaybackState(
-            PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_ERROR, 0, 0.0F)
-                .setErrorMessage(
-                    PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
-                    "sign in required"
-                )
-                .setExtras(extras)
-                .build()
+        mediaLibrarySession.setPlaybackException(
+            PlaybackException(
+                "sign in required",
+                null,
+                PlaybackException.ERROR_CODE_AUTHENTICATION_EXPIRED,
+                getExpiredAuthenticationResolutionExtras()
+            )
         )
     }
 
@@ -591,8 +662,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return true
     }
 
-    fun loginCommand(extras: Bundle, callback: ResultReceiver?): Boolean {
-        return refreshCommand(extras, callback, true)
+    fun loginCommand(future: SettableFuture<SessionResult>): Boolean {
+        return refreshCommand(future, true)
     }
 
     fun logoutCommand(callback: ResultReceiver?): Boolean {
@@ -605,32 +676,39 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     fun refreshCommand(
-        extras: Bundle?,
-        callback: ResultReceiver?,
+        future: SettableFuture<SessionResult>,
         login: Boolean = false
     ): Boolean {
-        isAuthenticated()
+        if (!isAuthenticated()) {
+            future.set(
+                SessionResult(
+                    SessionResult.RESULT_ERROR_SESSION_AUTHENTICATION_EXPIRED,
+                    getExpiredAuthenticationResolutionExtras()
+                )
+            )
+            return false
+        }
+
         checkInit(!login)
         if (login) {
             mediaSource.whenReady {
-                serviceScope.launch {
-                    delay(500L)
-                    callback?.send(Activity.RESULT_OK, Bundle.EMPTY)
-                }
+                future.set(SessionResult(SessionResult.RESULT_SUCCESS))
             }
+        } else {
+            future.set(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
-        // Updated state (including clearing the error) now that the user has logged in.
-        mediaSession.setPlaybackState(
-            PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_NONE, 0, 0F)
-                .build()
-        )
-        mediaSessionConnector.setCustomErrorMessage(null)
-        mediaSessionConnector.invalidateMediaSessionPlaybackState()
-        mediaSessionConnector.invalidateMediaSessionMetadata()
-        mediaSessionConnector.invalidateMediaSessionQueue()
-        this.notifyChildrenChanged(UAMP_BROWSABLE_ROOT)
+//        // Updated state (including clearing the error) now that the user has logged in.
+//        mediaSession.setPlaybackState(
+//            PlaybackStateCompat.Builder()
+//                .setState(PlaybackStateCompat.STATE_NONE, 0, 0F)
+//                .build()
+//        )
+//        mediaSessionConnector.setCustomErrorMessage(null)
+//        mediaSessionConnector.invalidateMediaSessionPlaybackState()
+//        mediaSessionConnector.invalidateMediaSessionMetadata()
+//        mediaSessionConnector.invalidateMediaSessionQueue()
+//        this.notifyChildrenChanged(UAMP_BROWSABLE_ROOT)
         return true
     }
 
@@ -999,16 +1077,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
         }
     }
+
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
+        return mediaLibrarySession
+    }
 }
 
 const val NETWORK_FAILURE = "us.berkovitz.plexaaos.NETWORK_FAILURE"
 
 /** Content styling constants */
-private const val CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
-private const val CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
-private const val CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
-private const val CONTENT_STYLE_LIST = 1
-private const val CONTENT_STYLE_GRID = 2
+const val CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
+const val CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
+const val CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
+const val CONTENT_STYLE_LIST = 1
+const val CONTENT_STYLE_GRID = 2
 
 const val MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS = "playback_start_position_ms"
 

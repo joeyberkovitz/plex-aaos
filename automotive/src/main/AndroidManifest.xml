@@ -61,11 +61,12 @@
          MediaBrowser (for browsing) and MediaController (for playback control)
         -->
         <service
-            android:name=".MyMusicService"
+            android:name=".PlexMediaService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="true"
             tools:ignore="ExportedService">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService"/>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>

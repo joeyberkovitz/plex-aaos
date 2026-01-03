@@ -21,13 +21,13 @@ import android.net.Uri
 import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaMetadataCompat
-import com.google.android.exoplayer2.MediaMetadata
+import androidx.media3.common.MediaMetadata
 
 /**
  * Useful extensions for [MediaMetadataCompat].
  */
-inline val MediaMetadataCompat.id: String?
-    get() = getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID)
+//inline val MediaMetadata.Builder.id: String?
+//    get() = id(MediaMetadataCompat.METADATA_KEY_MEDIA_ID)
 
 inline val MediaMetadataCompat.title: String?
     get() = getString(MediaMetadataCompat.METADATA_KEY_TITLE)
@@ -272,8 +272,8 @@ fun MediaMetadataCompat.toMediaItemMetadata(): MediaMetadata {
     }.build()
 }
 
-fun MediaMetadataCompat.toMediaItem(): com.google.android.exoplayer2.MediaItem {
-    return with(com.google.android.exoplayer2.MediaItem.Builder()) {
+fun MediaMetadataCompat.toMediaItem(): androidx.media3.common.MediaItem {
+    return with(androidx.media3.common.MediaItem.Builder()) {
         setMediaId(mediaUri.toString())
         setUri(mediaUri)
         //setMimeType(MimeTypes.AUDIO_MPEG)

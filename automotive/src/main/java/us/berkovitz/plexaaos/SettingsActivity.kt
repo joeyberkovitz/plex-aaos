@@ -4,21 +4,15 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.os.Bundle
 import android.view.MenuItem
-import android.widget.Toolbar
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.ExposedDropdownMenuBox
@@ -38,19 +32,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.Button
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.select
 import us.berkovitz.plexaaos.ui.theme.PlexAAOSTheme
 import us.berkovitz.plexapi.myplex.MyPlexResource
 import us.berkovitz.plexapi.myplex.MyPlexUser
-import us.berkovitz.plexapi.storage.Storage
-import kotlin.math.exp
 
 class SettingsActivity : ComponentActivity() {
 
@@ -63,7 +53,7 @@ class SettingsActivity : ComponentActivity() {
 
         musicServiceConnection = MusicServiceConnection(
             applicationContext,
-            ComponentName(applicationContext, MyMusicService::class.java)
+            ComponentName(applicationContext, PlexMediaService::class.java)
         )
 
         plexUtil = PlexUtil(this)

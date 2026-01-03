@@ -1,7 +1,6 @@
 buildscript {
     ext {
         compose_ui_version = '1.4.3'
-        exoplayer_version = '2.19.0'
         glide_version = '4.15.1'
     }
     dependencies {

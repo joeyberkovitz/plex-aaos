@@ -40,17 +40,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import us.berkovitz.plexaaos.MyMusicService
 import us.berkovitz.plexaaos.ui.theme.PlexAAOSTheme
 import us.berkovitz.plexapi.config.Config
-import us.berkovitz.plexapi.config.Http
 import us.berkovitz.plexapi.myplex.MyPlexAccount
 import us.berkovitz.plexapi.myplex.MyPlexPinLogin
 
@@ -70,7 +66,7 @@ class LoginActivity : ComponentActivity() {
 
         musicServiceConnection = MusicServiceConnection(
             applicationContext,
-            ComponentName(applicationContext, MyMusicService::class.java)
+            ComponentName(applicationContext, PlexMediaService::class.java)
         )
 
         mAccountAuthenticatorResponse =

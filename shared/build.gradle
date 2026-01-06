@@ -12,7 +12,7 @@ repositories {
 
 
 android {
-    namespace 'us.berkovitz.plexaaos.shared'
+    namespace 'us.tiba.plexamp.shared'
     compileSdkVersion 33
 
     defaultConfig {

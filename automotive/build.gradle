@@ -35,11 +35,11 @@ android {
             }
         }
     }
-    namespace 'us.berkovitz.plexaaos'
+    namespace 'us.tiba.plexamp'
     compileSdk 36
 
     defaultConfig {
-        applicationId "us.berkovitz.plexaaos"
+        applicationId "us.tiba.plexamp"
         minSdk 29
         targetSdk 36
         versionCode 31

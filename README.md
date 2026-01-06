@@ -1,8 +1,6 @@
-# Unofficial Plex client for Android Automotive
+# Plexamp for AAOS
 
-This app is a Plex music client for Android Automotive.
-
-The application is available in the [Play Store](https://play.google.com/store/apps/details?id=us.berkovitz.plexaaos)
+An unofficial Plex music client for Android Auto and Android Automotive OS.
 
 ## Features
 
@@ -86,13 +84,13 @@ Root
 ### Prerequisites
 
 1. Clone this repository
-2. Clone the kotlin-plexapi fork with library browsing support:
+2. Clone the kotlin-plexapi library with music library browsing support:
    ```bash
-   git clone -b feature/library-browsing https://github.com/hamoudydev/kotlin-plexapi.git
+   git clone -b feature/music-library-browsing https://github.com/hamoudydev/kotlin-plexapi.git
    cd kotlin-plexapi
    ./gradlew publishToMavenLocal
    ```
-3. Create `local.properties` in the plex-aaos root with:
+3. Create `local.properties` in the project root with:
    ```properties
    sdk.dir=/path/to/Android/sdk
    gpr_user=your-github-username
@@ -119,7 +117,7 @@ Root
 
 ## Dependencies
 
-- [kotlin-plexapi](https://github.com/hamoudydev/kotlin-plexapi/tree/feature/library-browsing) - Plex API client library (fork with library browsing support)
+- [kotlin-plexapi](https://github.com/hamoudydev/kotlin-plexapi/tree/feature/music-library-browsing) - Plex API client library (with music library browsing support)
 - ExoPlayer - Media playback
 - Glide - Image loading
 

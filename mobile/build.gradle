@@ -20,11 +20,11 @@ android {
             keyPassword 'password'
         }
     }
-    namespace 'us.tiba.plexamp'
+    namespace 'us.berkovitz.plexaaos'
     compileSdk 33
 
     defaultConfig {
-        applicationId "us.tiba.plexamp"
+        applicationId "us.berkovitz.plexaaos"
         minSdk 28
         targetSdk 33
         versionCode 1

@@ -7,16 +7,7 @@ plugins {
 }
 
 repositories {
-    mavenLocal()
-    maven {
-        url = uri("https://maven.pkg.github.com/joeyberkovitz/kotlin-plexapi")
-        credentials {
-            Properties properties = new Properties()
-            properties.load(project.rootProject.file('local.properties').newDataInputStream())
-            username = properties.getProperty("gpr_user") ?: System.getenv("GITHUB_ACTOR")
-            password = properties.getProperty("gpr_key") ?: System.getenv("GITHUB_TOKEN")
-        }
-    }
+    maven { url 'https://jitpack.io' }
     google()
     mavenCentral()
 }
@@ -25,22 +16,25 @@ android {
     signingConfigs {
         Properties properties = new Properties()
         properties.load(project.rootProject.file('local.properties').newDataInputStream())
-        release {
-            storeFile file(properties.getProperty("signing_key_path"))
-            storePassword properties.getProperty("signing_key_password")
-            keyAlias properties.getProperty("signing_key_alias")
-            keyPassword properties.getProperty("signing_key_password")
+        def signingKeyPath = properties.getProperty("signing_key_path")
+        if (signingKeyPath != null) {
+            release {
+                storeFile file(signingKeyPath)
+                storePassword properties.getProperty("signing_key_password")
+                keyAlias properties.getProperty("signing_key_alias")
+                keyPassword properties.getProperty("signing_key_password")
+            }
         }
     }
-    namespace 'us.berkovitz.plexaaos'
+    namespace 'us.tiba.plexamp'
     compileSdk 36
 
     defaultConfig {
-        applicationId "us.berkovitz.plexaaos"
+        applicationId "us.tiba.plexamp"
         minSdk 29
         targetSdk 36
-        versionCode 31
-        versionName "0.7.2"
+        versionCode 35
+        versionName "1.0.0"
 
         buildFeatures {
             buildConfig = true
@@ -50,13 +44,15 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
-        signingConfig signingConfigs.release
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (signingConfigs.findByName('release')) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     compileOptions {
@@ -100,7 +96,7 @@ dependencies {
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_ui_version"
 
     implementation 'androidx.media:media:1.6.0'
-    implementation 'us.berkovitz:kotlin-plexapi:0.1.17'
+    implementation 'com.github.hamoudydev:plexamp-for-aaos-api:1.0.0'
 
     api "com.google.android.exoplayer:exoplayer-core:$exoplayer_version"
     api "com.google.android.exoplayer:exoplayer-ui:$exoplayer_version"

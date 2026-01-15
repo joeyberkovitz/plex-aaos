@@ -84,7 +84,7 @@
 
         <provider
             android:name=".library.AlbumArtContentProvider"
-            android:authorities="us.berkovitz.plexaaos"
+            android:authorities="us.tiba.plexamp"
             android:exported="true"
             tools:ignore="ExportedContentProvider" />
     </application>

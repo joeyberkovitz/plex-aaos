@@ -1,8 +1,14 @@
 <resources>
-    <string name="app_name">Plex AAOS</string>
+    <string name="app_name">Plexamp for AAOS</string>
     <string name="title_activity_login">LoginActivity</string>
     <string name="error_login_button">Click to sign in</string>
+    <string name="home_title">Home</string>
     <string name="playlists_title">Playlists</string>
+    <string name="artists_title">Artists</string>
+    <string name="albums_title">Albums</string>
+    <string name="recently_played_title">Recently Played</string>
+    <string name="recently_added_title">Recently Added</string>
+    <string name="on_deck_title">On Deck</string>
     <string name="title_activity_settings">SettingsActivity</string>
 
     <!-- Preference Titles -->

@@ -101,6 +101,7 @@ dependencies {
 
     implementation 'androidx.media:media:1.6.0'
     implementation 'us.berkovitz:kotlin-plexapi:0.1.17'
+    implementation 'io.github.g0dkar:qrcode-kotlin-android:4.5.0'
 
     api "com.google.android.exoplayer:exoplayer-core:$exoplayer_version"
     api "com.google.android.exoplayer:exoplayer-ui:$exoplayer_version"

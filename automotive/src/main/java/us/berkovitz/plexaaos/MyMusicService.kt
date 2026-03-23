@@ -105,6 +105,7 @@ import kotlin.math.min
 
 const val LOGIN = "us.berkovitz.plexaaos.COMMAND.LOGIN"
 const val REFRESH = "us.berkovitz.plexaaos.COMMAND.REFRESH"
+const val LOGOUT = "us.berkovitz.plexaaos.COMMAND.LOGOUT"
 
 
 class MyMusicService : MediaBrowserServiceCompat() {
@@ -247,7 +248,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             when (command) {
                 LOGIN -> loginCommand(extras ?: Bundle.EMPTY, callback)
                 REFRESH -> refreshCommand(extras ?: Bundle.EMPTY, callback)
-                //LOGOUT -> logoutCommand(extras ?: Bundle.EMPTY, callback)
+                LOGOUT -> logoutCommand(callback)
                 else -> false
             }
     }
@@ -592,6 +593,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     fun loginCommand(extras: Bundle, callback: ResultReceiver?): Boolean {
         return refreshCommand(extras, callback, true)
+    }
+
+    fun logoutCommand(callback: ResultReceiver?): Boolean {
+        currentPlayer.stop()
+        currentPlayer.clearMediaItems()
+        plexUtil.clearToken()
+        requireLogin()
+        callback?.send(Activity.RESULT_OK, Bundle.EMPTY)
+        return true
     }
 
     fun refreshCommand(

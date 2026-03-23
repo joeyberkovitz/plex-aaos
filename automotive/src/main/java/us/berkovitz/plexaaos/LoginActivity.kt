@@ -8,11 +8,16 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.asImageBitmap
+import qrcode.QRCode
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Button
@@ -207,14 +212,38 @@ class LoginActivity : ComponentActivity() {
 
 @Composable
 fun EnterPin(pin: MutableState<String>) {
-    var text = "Loading ..."
-    if (!pin.value.isBlank()) {
-        text = "Enter pin at https://plex.tv/link: ${pin.value}"
+    if (pin.value.isBlank()) {
+        Text(
+            text = "Loading ...",
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 30.sp
+        )
+    } else {
+        Text(
+            text = "Scan or go to plex.tv/link:",
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 30.sp
+        )
+        val qrBytes = remember(pin.value) {
+            QRCode.ofSquares()
+                .build("https://plex.tv/link")
+                .renderToBytes()
+        }
+        val bitmap = remember(qrBytes) {
+            BitmapFactory.decodeByteArray(qrBytes, 0, qrBytes.size)
+        }
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "QR code for plex.tv/link",
+            modifier = Modifier.size(200.dp)
+        )
+        Text(
+            text = pin.value,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = 80.sp
+        )
     }
-    Text(
-        text = text,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth(),
-        fontSize = 30.sp
-    )
 }

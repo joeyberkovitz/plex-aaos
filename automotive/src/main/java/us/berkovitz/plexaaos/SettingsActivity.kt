@@ -24,6 +24,7 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.ExposedDropdownMenuBox
 import androidx.compose.material.ExposedDropdownMenuDefaults
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.Button
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import us.berkovitz.plexaaos.ui.theme.PlexAAOSTheme
@@ -81,6 +83,7 @@ class SettingsActivity : ComponentActivity() {
                 ) {
                     SelectServerDropdown()
                     SelectUserSetting()
+                    SignOutButton()
                 }
             }
         }
@@ -312,6 +315,24 @@ class SettingsActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    @Composable
+    fun SignOutButton() {
+        Button(
+            onClick = {
+                musicServiceConnection.sendCommand(LOGOUT, Bundle.EMPTY)
+                finish()
+            },
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = MaterialTheme.colors.error
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 32.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Text("Sign Out", fontSize = 20.sp, color = Color.White)
         }
     }
 

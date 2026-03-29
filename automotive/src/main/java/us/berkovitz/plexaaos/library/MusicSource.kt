@@ -17,16 +17,13 @@
 package us.berkovitz.plexaaos.library
 
 import android.os.Bundle
-import android.support.v4.media.MediaMetadataCompat
 import androidx.annotation.IntDef
+import androidx.media3.common.MediaItem as Media3Item
 import us.berkovitz.plexapi.media.MediaItem
 import us.berkovitz.plexapi.media.Playlist
 
 /**
- * Interface used by [MusicService] for looking up [MediaMetadataCompat] objects.
- *
- * Because Kotlin provides methods such as [Iterable.find] and [Iterable.filter],
- * this is a convenient interface to have on sources.
+ * Interface used by [MyMusicService] for looking up media content.
  */
 interface MusicSource : Iterable<Playlist> {
 
@@ -53,7 +50,7 @@ interface MusicSource : Iterable<Playlist> {
 
     fun playlistWhenReady(playlistId: String, performAction: (Playlist?) -> Unit): Boolean
 
-    fun search(query: String, extras: Bundle): List<MediaMetadataCompat>
+    fun search(query: String, extras: Bundle): List<Media3Item>
 }
 
 @IntDef(
@@ -175,7 +172,7 @@ abstract class AbstractMusicSource : MusicSource {
      * Handles searching a [MusicSource] from a focused voice search, often coming
      * from the Google Assistant.
      */
-    override fun search(query: String, extras: Bundle): List<MediaMetadataCompat> {
+    override fun search(query: String, extras: Bundle): List<Media3Item> {
         return emptyList()
     }
 }

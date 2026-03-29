@@ -18,51 +18,20 @@ package us.berkovitz.plexaaos.library
 
 import android.content.Context
 import android.net.Uri
-import android.support.v4.media.MediaBrowserCompat.MediaItem
-import android.support.v4.media.MediaDescriptionCompat
-import android.support.v4.media.MediaMetadataCompat
+import androidx.media3.common.MediaItem
 import us.berkovitz.plexaaos.R
-import us.berkovitz.plexaaos.extensions.*
+import us.berkovitz.plexaaos.extensions.buildBrowsableItem
+import us.berkovitz.plexaaos.extensions.toMediaItem
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.Track
 
-/**
- * Represents a tree of media that's used by [MusicService.onLoadChildren].
- *
- * [BrowseTree] maps a media id (see: [MediaMetadataCompat.METADATA_KEY_MEDIA_ID]) to one (or
- * more) [MediaMetadataCompat] objects, which are children of that media id.
- *
- * For example, given the following conceptual tree:
- * root
- *  +-- Albums
- *  |    +-- Album_A
- *  |    |    +-- Song_1
- *  |    |    +-- Song_2
- *  ...
- *  +-- Artists
- *  ...
- *
- *  Requesting `browseTree["root"]` would return a list that included "Albums", "Artists", and
- *  any other direct children. Taking the media ID of "Albums" ("Albums" in this example),
- *  `browseTree["Albums"]` would return a single item list "Album_A", and, finally,
- *  `browseTree["Album_A"]` would return "Song_1" and "Song_2". Since those are leaf nodes,
- *  requesting `browseTree["Song_1"]` would return null (there aren't any children of it).
- */
 class BrowseTree(
     val context: Context,
     var musicSource: MusicSource,
     val recentMediaId: String? = null
 ) {
-    private val mediaIdToChildren = mutableMapOf<String, MutableList<MediaMetadataCompat>>()
+    private val mediaIdToChildren = mutableMapOf<String, MutableList<MediaItem>>()
 
-    /**
-     * In this example, there's a single root node (identified by the constant
-     * [UAMP_BROWSABLE_ROOT]). The root's children are each album included in the
-     * [MusicSource], and the children of each album are the songs on that album.
-     * (See [BrowseTree.buildAlbumRoot] for more details.)
-     *
-     * TODO: Expand to allow more browsing types.
-     */
     init {
         reset()
     }
@@ -76,15 +45,16 @@ class BrowseTree(
         mediaIdToChildren.clear()
         val rootList = mediaIdToChildren[UAMP_BROWSABLE_ROOT] ?: mutableListOf()
 
-        val playlistsMetadata = MediaMetadataCompat.Builder().apply {
-            id = UAMP_PLAYLISTS_ROOT
-            title = context.getString(R.string.playlists_title)
-            albumArtUri = RESOURCE_ROOT_URI +
-                    context.resources.getResourceEntryName(R.drawable.baseline_library_music_24)
-            flag = MediaItem.FLAG_BROWSABLE
-        }.build()
+        val playlistsItem = buildBrowsableItem(
+            mediaId = UAMP_PLAYLISTS_ROOT,
+            title = context.getString(R.string.playlists_title),
+            artworkUri = Uri.parse(
+                RESOURCE_ROOT_URI +
+                        context.resources.getResourceEntryName(R.drawable.baseline_library_music_24)
+            )
+        )
 
-        rootList += playlistsMetadata
+        rootList += playlistsItem
         mediaIdToChildren[UAMP_BROWSABLE_ROOT] = rootList
         refresh()
     }
@@ -94,139 +64,27 @@ class BrowseTree(
             val playlistId = playlist.ratingKey.toString()
             val playlistChildren = mediaIdToChildren[playlistId] ?: buildPlaylistRoot(playlist)
             for (item in playlist.loadedItems()) {
-                playlistChildren += MediaMetadataCompat.Builder().buildMeta(item)
+                if (item is Track) {
+                    playlistChildren += item.toMediaItem()
+                }
             }
         }
     }
 
-    /**
-     * Provide access to the list of children with the `get` operator.
-     * i.e.: `browseTree\[UAMP_BROWSABLE_ROOT\]`
-     */
     operator fun get(mediaId: String) = mediaIdToChildren[mediaId]
 
-    // Creates a list for the playlist children
-    private fun buildPlaylistRoot(mediaItem: Playlist): MutableList<MediaMetadataCompat> {
-        val playlistMetadata = MediaMetadataCompat.Builder().from(mediaItem).build()
+    private fun buildPlaylistRoot(playlist: Playlist): MutableList<MediaItem> {
+        val playlistItem = playlist.toMediaItem()
 
-        // Adds this album to the 'Albums' category.
         val rootList = mediaIdToChildren[UAMP_PLAYLISTS_ROOT] ?: mutableListOf()
-        rootList += playlistMetadata
+        rootList += playlistItem
         mediaIdToChildren[UAMP_PLAYLISTS_ROOT] = rootList
 
-        // Insert the album's root with an empty list for its children, and return the list.
-        return mutableListOf<MediaMetadataCompat>().also {
-            mediaIdToChildren[playlistMetadata.id!!] = it
+        return mutableListOf<MediaItem>().also {
+            mediaIdToChildren[playlistItem.mediaId] = it
         }
     }
 }
-
-fun MediaMetadataCompat.Builder.from(playlist: Playlist): MediaMetadataCompat.Builder {
-    id = playlist.ratingKey.toString()
-    title = playlist.title
-    mediaUri = playlist.getServer()?.urlFor(playlist.key) ?: playlist.key
-    flag = MediaItem.FLAG_BROWSABLE
-    trackCount = playlist.leafCount
-    if (playlist.duration > 0) {
-        duration = playlist.duration
-    }
-
-    // entries with 'icon' set are always bad URLs
-    var iconUrl = if (!playlist.composite.isNullOrEmpty() && playlist.icon.isNullOrEmpty()) {
-        playlist.composite
-    } else {
-        null
-    }
-
-    if (iconUrl != null) {
-        iconUrl = playlist.getServer()!!.urlFor(iconUrl)
-        iconUrl = AlbumArtContentProvider.mapUri(Uri.parse(iconUrl)).toString()
-    }
-
-
-    // To make things easier for *displaying* these, set the display properties as well.
-    displayIconUri = iconUrl
-    albumArtUri = iconUrl
-
-
-    // To make things easier for *displaying* these, set the display properties as well.
-    displayTitle = playlist.title
-
-    // Add downloadStatus to force the creation of an "extras" bundle in the resulting
-    // MediaMetadataCompat object. This is needed to send accurate metadata to the
-    // media session during updates.
-    downloadStatus = MediaDescriptionCompat.STATUS_NOT_DOWNLOADED
-
-    // Allow it to be used in the typical builder style.
-    return this
-}
-
-fun MediaMetadataCompat.Builder.from(
-    mediaItem: us.berkovitz.plexapi.media.MediaItem,
-    playlistId: String? = null
-): MediaMetadataCompat.Builder {
-    if (mediaItem !is Track) {
-        return this
-    }
-
-    if (playlistId == null)
-        id = mediaItem.ratingKey.toString()
-    else
-        id = "${playlistId}/${mediaItem.ratingKey}"
-    title = mediaItem.title
-    mediaUri = mediaItem.getStreamUrl()
-    flag = MediaItem.FLAG_PLAYABLE
-    trackCount = 1
-    duration = mediaItem.duration
-
-    var iconUrl = if (!mediaItem.thumb.isNullOrEmpty()) {
-        mediaItem.thumb
-    } else if (!mediaItem.parentThumb.isNullOrEmpty()) {
-        mediaItem.parentThumb
-    } else if (!mediaItem.grandparentThumb.isNullOrEmpty()) {
-        mediaItem.grandparentThumb
-    } else {
-        null
-    }
-
-    if (iconUrl != null) {
-        iconUrl = mediaItem._server!!.urlFor(iconUrl)
-        iconUrl = AlbumArtContentProvider.mapUri(Uri.parse(iconUrl)).toString()
-    }
-
-    var artistName = mediaItem.grandparentTitle
-    if(!mediaItem.originalTitle.isNullOrEmpty()){
-        artistName = mediaItem.originalTitle
-    }
-
-    // To make things easier for *displaying* these, set the display properties as well.
-    displayIconUri = iconUrl
-    albumArtUri = iconUrl
-    displayTitle = mediaItem.title
-    displaySubtitle = artistName
-    displayDescription = mediaItem.parentTitle
-
-    artist = artistName
-    album = mediaItem.parentTitle
-
-    // Add downloadStatus to force the creation of an "extras" bundle in the resulting
-    // MediaMetadataCompat object. This is needed to send accurate metadata to the
-    // media session during updates.
-    downloadStatus = MediaDescriptionCompat.STATUS_NOT_DOWNLOADED
-
-    // Allow it to be used in the typical builder style.
-    return this
-}
-
-fun MediaMetadataCompat.Builder.buildMeta(
-    mediaItem: us.berkovitz.plexapi.media.MediaItem,
-    playlistId: String? = null
-): MediaMetadataCompat {
-    return from(mediaItem, playlistId).build().apply {
-        description.extras?.putAll(bundle)
-    }
-}
-
 
 private const val TAG = "BrowseTree"
 const val UAMP_BROWSABLE_ROOT = "/"

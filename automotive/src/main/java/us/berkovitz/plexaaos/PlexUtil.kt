@@ -3,10 +3,7 @@ package us.berkovitz.plexaaos
 import android.accounts.Account
 import android.accounts.AccountManager
 import android.content.Context
-import android.os.Bundle
-import us.berkovitz.plexaaos.library.PlexSource
 import us.berkovitz.plexapi.config.Config
-import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.MyPlexAccount
 import us.berkovitz.plexapi.myplex.MyPlexResource
 import us.berkovitz.plexapi.myplex.MyPlexUser

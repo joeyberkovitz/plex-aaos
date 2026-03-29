@@ -2,7 +2,6 @@ package us.berkovitz.plexaaos
 
 import android.content.Context
 import android.os.Build
-import android.provider.Settings
 import us.berkovitz.plexapi.config.Config
 import us.berkovitz.plexapi.logging.LoggingFactory
 

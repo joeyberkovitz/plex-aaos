@@ -40,6 +40,7 @@ import java.io.File
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -90,6 +91,7 @@ class MyMusicService : MediaLibraryService() {
     private var active = false
     private var wasActive = false
     private var previousPosition: Long = 0
+    private var positionSaveJob: Job? = null
 
     // Cache infrastructure
     private val downloadCache: Cache by lazy {
@@ -225,6 +227,32 @@ class MyMusicService : MediaLibraryService() {
         }
 
         checkInit()
+        resumeLastPlayback()
+    }
+
+    private fun resumeLastPlayback() {
+        serviceScope.launch {
+            val lastSong = AndroidStorage.getLastSong(applicationContext) ?: return@launch
+            val position = AndroidStorage.getLastPosition(applicationContext) ?: 0L
+            val idSplit = lastSong.split('/')
+            if (idSplit.size != 2) return@launch
+
+            try {
+                mediaSource.loadPlaylist(idSplit[0])
+            } catch (exc: Exception) {
+                logger.error("Failed to load playlist for resume: ${exc.message}")
+                return@launch
+            }
+
+            mediaSource.playlistWhenReady(idSplit[0]) { plist ->
+                serviceScope.launch {
+                    val tracks = plist?.items()?.filterIsInstance<Track>() ?: return@launch
+                    val builtPlaylist = tracks.map { it.toMediaItem(idSplit[0]) }
+                    val itemToPlay = builtPlaylist.find { it.mediaId == lastSong }
+                    preparePlaylist(builtPlaylist, itemToPlay, true, position)
+                }
+            }
+        }
     }
 
     fun checkInit(force: Boolean = false) {
@@ -249,6 +277,9 @@ class MyMusicService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        stopPeriodicPositionSave()
+        saveLastSong()
+
         mediaLibrarySession.release()
 
         serviceJob.cancel()
@@ -367,18 +398,30 @@ class MyMusicService : MediaLibraryService() {
         }
         currentPlaylistItems = metadataList
 
-        currentPlayer.playWhenReady = playWhenReady
         currentPlayer.stop()
-        logger.info("starting playback at position $initialWindowIndex, $playbackStartPositionMs")
         currentPlayer.setMediaItems(
             metadataList, initialWindowIndex, playbackStartPositionMs
         )
+
+        currentPlayer.playWhenReady = false
+        if (playWhenReady) {
+            // Buffer first, then start playback to avoid crackling
+            currentPlayer.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY) {
+                        currentPlayer.removeListener(this)
+                        currentPlayer.playWhenReady = true
+                    }
+                }
+            })
+        }
         currentPlayer.prepare()
 
         prefetchNextTracks(metadataList, initialWindowIndex, 5)
 
         active = true
         wasActive = true
+        startPeriodicPositionSave()
     }
 
     private fun prefetchNextTracks(
@@ -672,6 +715,20 @@ class MyMusicService : MediaLibraryService() {
             startIndex: Int,
             startPositionMs: Long
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            // If the car compat layer re-sends the current media item without a position,
+            // keep the current playlist and position instead of resetting to 0
+            if (mediaItems.size == 1 && startPositionMs == C.TIME_UNSET
+                && currentPlaylistItems.isNotEmpty()
+                && currentPlayer.mediaItemCount > 0
+                && mediaItems[0].mediaId == currentPlaylistItems.getOrNull(currentPlayer.currentMediaItemIndex)?.mediaId
+            ) {
+                return Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(
+                        currentPlaylistItems, currentPlayer.currentMediaItemIndex, currentPlayer.currentPosition
+                    )
+                )
+            }
+
             // Handle prepareFromMediaId equivalent
             if (mediaItems.size == 1) {
                 val prepareId = mediaItems[0].mediaId
@@ -762,6 +819,23 @@ class MyMusicService : MediaLibraryService() {
     /**
      * Listen for events from ExoPlayer.
      */
+    private fun startPeriodicPositionSave() {
+        positionSaveJob?.cancel()
+        positionSaveJob = serviceScope.launch {
+            while (true) {
+                delay(5000L)
+                if (active && currentPlayer.mediaItemCount > 0) {
+                    saveLastSong()
+                }
+            }
+        }
+    }
+
+    private fun stopPeriodicPositionSave() {
+        positionSaveJob?.cancel()
+        positionSaveJob = null
+    }
+
     private inner class PlayerEventListener : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             if (events.contains(Player.EVENT_POSITION_DISCONTINUITY)

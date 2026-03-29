@@ -17,7 +17,6 @@
 package us.berkovitz.plexaaos.library
 
 import android.os.Bundle
-import android.support.v4.media.MediaMetadataCompat
 import androidx.annotation.IntDef
 import us.berkovitz.plexapi.media.MediaItem
 import us.berkovitz.plexapi.media.Playlist
@@ -53,7 +52,7 @@ interface MusicSource : Iterable<Playlist> {
 
     fun playlistWhenReady(playlistId: String, performAction: (Playlist?) -> Unit): Boolean
 
-    fun search(query: String, extras: Bundle): List<MediaMetadataCompat>
+    fun search(query: String, extras: Bundle): List<androidx.media3.common.MediaItem>
 }
 
 @IntDef(
@@ -175,7 +174,7 @@ abstract class AbstractMusicSource : MusicSource {
      * Handles searching a [MusicSource] from a focused voice search, often coming
      * from the Google Assistant.
      */
-    override fun search(query: String, extras: Bundle): List<MediaMetadataCompat> {
+    override fun search(query: String, extras: Bundle): List<androidx.media3.common.MediaItem> {
         return emptyList()
     }
 }

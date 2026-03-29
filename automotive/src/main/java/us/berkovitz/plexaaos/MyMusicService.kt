@@ -1,15 +1,10 @@
 package us.berkovitz.plexaaos
 
 import android.app.Activity
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
-import android.os.IBinder
-import android.net.Uri
 import android.os.Bundle
 import android.os.ResultReceiver
-import android.util.Log
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -30,7 +25,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
-import androidx.core.app.NotificationCompat
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
@@ -38,7 +32,6 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
-import androidx.media.utils.MediaConstants
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -75,7 +68,6 @@ class MyMusicService : MediaLibraryService() {
         private val SESSION_COMMAND_LOGIN = SessionCommand(LOGIN, Bundle.EMPTY)
         private val SESSION_COMMAND_REFRESH = SessionCommand(REFRESH, Bundle.EMPTY)
         private val SESSION_COMMAND_LOGOUT = SessionCommand(LOGOUT, Bundle.EMPTY)
-        private const val PLACEHOLDER_NOTIFICATION_ID = 9999
         private const val ACTION_SHUFFLE = "shuffle"
         private const val ACTION_REPEAT = "repeat"
         private val SESSION_COMMAND_SHUFFLE = SessionCommand(ACTION_SHUFFLE, Bundle.EMPTY)
@@ -194,18 +186,8 @@ class MyMusicService : MediaLibraryService() {
             }
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        logger.info("onBind called with action: ${intent?.action}")
-        return super.onBind(intent)
-    }
-
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
-        logger.info("onGetSession called")
         return mediaLibrarySession
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onCreate() {
@@ -299,11 +281,11 @@ class MyMusicService : MediaLibraryService() {
         )
         val extras = Bundle().apply {
             putString(
-                MediaConstants.PLAYBACK_STATE_EXTRAS_KEY_ERROR_RESOLUTION_ACTION_LABEL,
+                "android.media.extras.ERROR_RESOLUTION_ACTION_LABEL",
                 getString(R.string.error_login_button)
             )
             putParcelable(
-                MediaConstants.PLAYBACK_STATE_EXTRAS_KEY_ERROR_RESOLUTION_ACTION_INTENT,
+                "android.media.extras.ERROR_RESOLUTION_ACTION_INTENT",
                 loginActivityPendingIntent
             )
         }

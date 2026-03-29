@@ -22,10 +22,7 @@ import us.berkovitz.plexapi.media.MediaItem
 import us.berkovitz.plexapi.media.Playlist
 
 /**
- * Interface used by [MusicService] for looking up [MediaMetadataCompat] objects.
- *
- * Because Kotlin provides methods such as [Iterable.find] and [Iterable.filter],
- * this is a convenient interface to have on sources.
+ * Interface used by [MyMusicService] for looking up media content.
  */
 interface MusicSource : Iterable<Playlist> {
 

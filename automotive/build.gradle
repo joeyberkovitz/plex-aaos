@@ -100,7 +100,6 @@ dependencies {
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_ui_version"
 
     implementation "androidx.media3:media3-session:$media3_version"
-    implementation 'androidx.media:media:1.6.0'
     implementation 'us.berkovitz:kotlin-plexapi:0.1.18'
     implementation 'io.github.g0dkar:qrcode-kotlin-android:4.5.0'
 

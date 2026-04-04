@@ -429,6 +429,17 @@ class PlexMediaService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             mediaId: String
         ): ListenableFuture<LibraryResult<MediaItem>> {
+            if(!isAuthenticated()){
+               return Futures.immediateFuture(
+                    LibraryResult.ofError(
+                        SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED,
+                        LibraryParams.Builder()
+                            .setExtras(getExpiredAuthenticationResolutionExtras()).build()
+                    )
+                )
+            }
+
+
             logger.error("onPrepareFromMediaId: $mediaId")
             val idSplit = mediaId.split('/')
             if (idSplit.size != 2) {

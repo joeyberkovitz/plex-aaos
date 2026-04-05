@@ -1,10 +1,8 @@
 package us.berkovitz.plexaaos.library
 
 import android.content.Context
-import android.util.Log
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import us.berkovitz.plexaaos.AndroidStorage
 import us.berkovitz.plexaaos.PlexLoggerFactory
@@ -14,7 +12,6 @@ import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.PlaylistType
 import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.MyPlexAccount
-import kotlin.coroutines.coroutineContext
 
 class PlexSource(
     private val plexToken: String,
@@ -48,6 +45,7 @@ class PlexSource(
                 setPlaylistState(playlistId, res, STATE_INITIALIZED)
             } else {
                 setPlaylistState(playlistId, null, STATE_ERROR)
+                throw Exception("failed to load playlist")
             }
         }
         return plist

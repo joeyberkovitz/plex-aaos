@@ -59,6 +59,10 @@ class BrowseTree(
 ) {
     private val mediaIdToChildren = mutableMapOf<String, MutableList<MediaItem>>()
 
+    companion object {
+        val PAGE_SIZE = 100
+    }
+
     /**
      * In this example, there's a single root node (identified by the constant
      * [UAMP_BROWSABLE_ROOT]). The root's children are each album included in the
@@ -84,8 +88,10 @@ class BrowseTree(
             setMediaId(UAMP_PLAYLISTS_ROOT)
             setMediaMetadata(MediaMetadata.Builder().apply {
                 setTitle(context.getString(R.string.playlists_title))
-                setArtworkUri(Uri.parse(RESOURCE_ROOT_URI +
-                        context.resources.getResourceEntryName(R.drawable.baseline_library_music_24)))
+                setArtworkUri(
+                    (RESOURCE_ROOT_URI +
+                            context.resources.getResourceEntryName(R.drawable.baseline_library_music_24)).toUri()
+                )
                 setIsBrowsable(true)
                 setIsPlayable(false)
                 setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS)
@@ -108,8 +114,14 @@ class BrowseTree(
 
         val playlistId = playlist.ratingKey.toString()
         val playlistChildren = mediaIdToChildren[playlistId] ?: buildPlaylistRoot(playlist)
-        for (item in playlist.loadedItems()) {
-            playlistChildren += MediaItem.Builder().buildMeta(item, playlistId)
+        val items = playlist.loadedItems()
+        for ((idx, item) in items.withIndex()) {
+            var pageNum: String? = null
+            if (items.size > PAGE_SIZE) {
+                pageNum = idx.floorDiv(PAGE_SIZE).toString()
+            }
+
+            playlistChildren += MediaItem.Builder().buildMeta(item, playlistId, pageNum)
         }
     }
 
@@ -122,19 +134,12 @@ class BrowseTree(
     fun getByID(parentMediaId: String): MediaItem? {
         var playlistId = parentMediaId
         val splitMediaId = parentMediaId.split('/')
-        var mediaId = parentMediaId
-        if (splitMediaId.size == 2) {
+        if (splitMediaId.size >= 2) {
             playlistId = splitMediaId[0]
-            mediaId = splitMediaId[1]
         }
 
-        Log.e("GETBYID", "PlaylistID: ${playlistId}; Item: ${mediaId}")
-
         val playlist = mediaIdToChildren[playlistId]
-        Log.e("PLAYLIST", "${playlist}")
-
-        val item = playlist?.find { it -> it.mediaId == parentMediaId }
-        Log.e("PLAYLIST", "${item}")
+        val item = playlist?.find { it.mediaId == parentMediaId }
 
         return item
     }
@@ -197,16 +202,19 @@ fun MediaItem.Builder.from(playlist: Playlist): MediaItem.Builder {
 
 fun MediaItem.Builder.from(
     mediaItem: us.berkovitz.plexapi.media.MediaItem,
-    playlistId: String? = null
+    playlistId: String? = null,
+    pageNum: String? = null
 ): MediaItem.Builder {
     if (mediaItem !is Track) {
         return this
     }
 
     if (playlistId == null)
-        setMediaId( mediaItem.ratingKey.toString())
+        setMediaId(mediaItem.ratingKey.toString())
+    else if (pageNum != null)
+        setMediaId("${playlistId}/page_${pageNum}/${mediaItem.ratingKey}")
     else
-        setMediaId( "${playlistId}/${mediaItem.ratingKey}")
+        setMediaId("${playlistId}/${mediaItem.ratingKey}")
 
     var iconUri: Uri? = null
 
@@ -226,7 +234,7 @@ fun MediaItem.Builder.from(
     }
 
     var artistName = mediaItem.grandparentTitle
-    if(!mediaItem.originalTitle.isNullOrEmpty()){
+    if (!mediaItem.originalTitle.isNullOrEmpty()) {
         artistName = mediaItem.originalTitle
     }
 
@@ -258,9 +266,10 @@ fun MediaItem.Builder.from(
 
 fun MediaItem.Builder.buildMeta(
     mediaItem: us.berkovitz.plexapi.media.MediaItem,
-    playlistId: String? = null
+    playlistId: String? = null,
+    pageNum: String? = null
 ): MediaItem {
-    return from(mediaItem, playlistId).build()
+    return from(mediaItem, playlistId, pageNum).build()
 }
 
 

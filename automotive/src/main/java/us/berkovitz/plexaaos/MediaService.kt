@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.content.Intent
 import android.os.Bundle
+import android.support.v4.media.MediaMetadataCompat
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -18,7 +19,19 @@ import androidx.media3.common.Player.REPEAT_MODE_ALL
 import androidx.media3.common.Player.REPEAT_MODE_OFF
 import androidx.media3.common.Player.REPEAT_MODE_ONE
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.Cache
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.offline.Download
+import androidx.media3.exoplayer.offline.DownloadManager
+import androidx.media3.exoplayer.offline.DownloadRequest
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaConstants.EXTRAS_KEY_ERROR_RESOLUTION_ACTION_INTENT_COMPAT
@@ -37,6 +50,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import us.berkovitz.plexaaos.extensions.id
 import us.berkovitz.plexaaos.library.BrowseTree
 import us.berkovitz.plexaaos.library.MusicSource
 import us.berkovitz.plexaaos.library.PlexSource
@@ -45,6 +59,8 @@ import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
 import us.berkovitz.plexaaos.library.buildMeta
 import us.berkovitz.plexapi.media.Track
 import us.berkovitz.plexapi.myplex.AuthorizationException
+import java.io.File
+import java.util.concurrent.Executors
 import kotlin.math.ceil
 import kotlin.math.min
 
@@ -67,6 +83,72 @@ class PlexMediaService : MediaLibraryService() {
         BrowseTree(applicationContext, mediaSource)
     }
 
+    // ExoPlayer cache infrastructure
+    private val downloadCache: Cache by lazy {
+        val cacheDir = File(cacheDir, "exoplayer_cache")
+        val databaseProvider = StandaloneDatabaseProvider(this)
+        SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(200L * 1024L * 1024L), databaseProvider)
+    }
+
+    // DownloadManager Listener to track download events
+    private val downloadListener = object : DownloadManager.Listener {
+        override fun onDownloadChanged(
+            downloadManager: DownloadManager,
+            download: Download,
+            finalException: Exception?
+        ) {
+            val logger = PlexLoggerFactory.loggerFor(android.app.DownloadManager::class)
+            when (download.state) {
+                Download.STATE_COMPLETED -> {
+                    logger.debug("Download completed: ${download.request.id}")
+                }
+                Download.STATE_FAILED -> {
+                    logger.error("Download failed: ${download.request.id}, error: ${finalException?.message}")
+                }
+                Download.STATE_DOWNLOADING -> {
+                    val progress = download.percentDownloaded
+                    logger.debug("Downloading: ${download.request.id}, progress: $progress%")
+                }
+                Download.STATE_QUEUED -> {
+                    logger.debug("Download queued: ${download.request.id}")
+                }
+                Download.STATE_REMOVING -> {
+                    logger.debug("Download removing: ${download.request.id}")
+                }
+                Download.STATE_RESTARTING -> {
+                    logger.debug("Download restarting: ${download.request.id}")
+                }
+                Download.STATE_STOPPED -> {
+                    logger.debug("Download stopped: ${download.request.id}")
+                }
+            }
+        }
+
+        override fun onDownloadRemoved(
+            downloadManager: DownloadManager,
+            download: Download
+        ) {
+            logger.debug("Download removed: ${download.request.id}")
+        }
+    }
+
+    // ExoPlayer DownloadManager for prefetching
+    private val downloadManager: DownloadManager by lazy {
+        val downloadExecutor = Executors.newFixedThreadPool(6)
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        DownloadManager(
+            this,
+            StandaloneDatabaseProvider(this),
+            downloadCache,
+            httpDataSourceFactory,
+            downloadExecutor
+        ).apply {
+            maxParallelDownloads = 3
+            requirements = DownloadManager.DEFAULT_REQUIREMENTS
+            addListener(downloadListener)
+        }
+    }
+
     private val uAmpAudioAttributes = AudioAttributes.Builder()
         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
         .setUsage(C.USAGE_MEDIA)
@@ -79,8 +161,25 @@ class PlexMediaService : MediaLibraryService() {
         AndroidPlexApi.initPlexApi(this)
         plexUtil = PlexUtil(this)
 
+        val cacheDataSourceFactory = CacheDataSource.Factory()
+            .setCache(downloadCache)
+            .setUpstreamDataSourceFactory(DefaultHttpDataSource.Factory())
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
         player = PlexPlayer(
-            ExoPlayer.Builder(this).build().apply {
+            ExoPlayer.Builder(this)
+                .setMediaSourceFactory(DefaultMediaSourceFactory(cacheDataSourceFactory))
+                .setLoadControl (
+                    DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(
+                            10*1000,
+                            5*60*1000,
+                            10*1000,
+                            10*1000,
+                        )
+                        .build()
+                )
+                .build().apply {
                 setAudioAttributes(uAmpAudioAttributes, true)
                 setHandleAudioBecomingNoisy(true)
                 addListener(playerListener)
@@ -679,6 +778,9 @@ class PlexMediaService : MediaLibraryService() {
             items = browseTree[playlistId] ?: emptyList()
             val startIndex = items.indexOfFirst { it.mediaId == mediaItems[0].mediaId }
 
+            // Prefetch next tracks using ExoPlayer's DownloadManager
+            prefetchNextTracks( 5)
+
             return super.onSetMediaItems(
                 mediaSession,
                 controller,
@@ -686,6 +788,65 @@ class PlexMediaService : MediaLibraryService() {
                 startIndex,
                 startPositionMs
             )
+        }
+    }
+
+    /**
+     * Prefetch next N tracks using ExoPlayer's DownloadManager.
+     * Respects shuffle mode by using the player's timeline to determine the actual next tracks.
+     */
+    private fun prefetchNextTracks(count: Int = 5) {
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return
+
+        val currentWindowIndex = player.currentMediaItemIndex
+        val indicesToPrefetch = mutableListOf<Int>()
+
+        // Get the next N windows in playback order (respects shuffle mode)
+        var nextWindowIndex = timeline.getNextWindowIndex(
+            currentWindowIndex,
+            player.repeatMode,
+            player.shuffleModeEnabled
+        )
+
+        var remaining = count
+        while (nextWindowIndex != C.INDEX_UNSET && remaining > 0) {
+            indicesToPrefetch.add(nextWindowIndex)
+            remaining--
+
+            // Get the next window after this one
+            nextWindowIndex = timeline.getNextWindowIndex(
+                nextWindowIndex,
+                player.repeatMode,
+                player.shuffleModeEnabled
+            )
+
+            // Prevent infinite loop in case of repeat mode
+            if (indicesToPrefetch.size >= min(count, timeline.windowCount)) {
+                break
+            }
+        }
+
+        // Prefetch the tracks in the order they will actually play
+        for (windowIndex in indicesToPrefetch) {
+            if (windowIndex >= 0 && windowIndex < player.mediaItemCount) {
+                val meta = player.getMediaItemAt(windowIndex)
+                val uri = meta.localConfiguration?.uri ?: continue
+                val id = meta.mediaId
+
+                try {
+                    // Create download request for the track
+                    val downloadRequest = DownloadRequest.Builder(id, uri)
+                        .build()
+
+                    // Add to download manager (it will cache the content)
+                    downloadManager.addDownload(downloadRequest)
+                    downloadManager.resumeDownloads()
+                    logger.debug("Prefetching track at index $windowIndex: $id (shuffle: ${player.shuffleModeEnabled})")
+                } catch (e: Exception) {
+                    logger.error("Failed to add download for $id: ${e.message}")
+                }
+            }
         }
     }
 
@@ -705,6 +866,20 @@ class PlexMediaService : MediaLibraryService() {
 
 
     private fun releaseMediaSession() {
+        // Release download manager and cache resources.
+        try {
+            downloadManager.removeListener(downloadListener)
+            downloadManager.release()
+        } catch (e: Exception) {
+            // downloadManager might not have been initialized
+        }
+
+        try {
+            downloadCache.release()
+        } catch (e: Exception) {
+            // downloadCache might not have been initialized
+        }
+
         mediaLibrarySession.run {
             release()
             if (player.playbackState != Player.STATE_IDLE) {
@@ -729,6 +904,12 @@ class PlexMediaService : MediaLibraryService() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             super.onMediaItemTransition(mediaItem, reason)
             saveLastSong(mediaItem?.mediaId, 0)
+
+            try {
+                prefetchNextTracks(5)
+            } catch (t: Throwable) {
+                logger.error("prefetch failed: ${t.message}")
+            }
         }
 
         override fun onPositionDiscontinuity(

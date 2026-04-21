@@ -201,7 +201,7 @@ class SettingsFragment : PreferenceFragment(), PinEntryDialogFragment.PinEntryLi
             return false 
         } else {
             lifecycleScope.launch {
-                performUserSwitch(userId, user?.title ?: getString(R.string.unknown))
+                performUserSwitch(userId, user?.title ?: getString(R.string.unknown_user))
             }
             return false
         }
@@ -210,7 +210,7 @@ class SettingsFragment : PreferenceFragment(), PinEntryDialogFragment.PinEntryLi
     // PinEntryListener implementation
     override suspend fun onPinEntered(pin: String): String? {
         val userId = pendingPinUserId ?: ""
-        val userTitle = pendingPinUserTitle ?: getString(R.string.unknown)
+        val userTitle = pendingPinUserTitle ?: getString(R.string.unknown_user)
 
         val error = performUserSwitch(userId, userTitle, pin)
 

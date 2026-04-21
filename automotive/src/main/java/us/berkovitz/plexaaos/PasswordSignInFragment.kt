@@ -1,7 +1,6 @@
 package us.berkovitz.plexaaos
 
 import android.os.Bundle
-import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -69,7 +68,7 @@ class PasswordSignInFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val loginRes = MyPlexAccount.login(username, password)
-                if (!loginRes.isNullOrEmpty()) {
+                if (loginRes.isNotEmpty()) {
                     val token = "${Config.X_PLEX_IDENTIFIER}|${loginRes}"
                     withContext(Dispatchers.Main) {
                         (activity as? LoginActivity)?.setToken(token)
@@ -77,7 +76,7 @@ class PasswordSignInFragment : Fragment() {
                 }
             } catch (exc: Exception) {
                 withContext(Dispatchers.Main) {
-                    errCb(exc.message ?: "login error");
+                    errCb(exc.message ?: getString(R.string.unknown_error))
                 }
             }
         }

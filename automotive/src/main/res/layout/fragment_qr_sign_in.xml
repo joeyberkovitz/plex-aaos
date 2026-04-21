@@ -11,7 +11,7 @@
         style="@style/TextAppearance.CarUi.ListItem"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Sign in with QR code"
+        android:text="@string/login_with_qr"
         android:textAlignment="center" />
 
     <TextView
@@ -20,7 +20,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/car_ui_padding_3"
-        android:text="Scan code (or go to plex.tv/link), then enter PIN shown below"
+        android:text="@string/login_qr_instructions"
         android:textAlignment="center" />
 
     <ImageView
@@ -29,6 +29,7 @@
         android:layout_height="196dp"
         android:layout_marginTop="@dimen/car_ui_padding_5"
         android:background="#FFFFFF"
+        android:contentDescription="@string/qr_code_description"
         android:padding="@dimen/car_ui_padding_2" />
 
     <TextView
@@ -49,6 +50,6 @@
         android:layout_height="@dimen/car_ui_touch_target_size"
         android:layout_marginTop="@dimen/car_ui_padding_2"
         android:paddingHorizontal="@dimen/car_ui_padding_3"
-        android:text="Sign in with username/password"
+        android:text="@string/login_with_password"
         android:textAllCaps="false" />
 </LinearLayout>

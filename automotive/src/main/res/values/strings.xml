@@ -1,11 +1,9 @@
 <resources>
     <string name="app_name">Plex AAOS</string>
-    <string name="title_activity_login">Sign In</string>
-    <string name="error_login_button">Click to sign in</string>
     <string name="playlists_title">Playlists</string>
-    <string name="title_activity_settings">Settings</string>
 
-    <!-- Preference Titles -->
+    <!-- Settings -->
+    <string name="title_activity_settings">Settings</string>
     <string name="account_header">Account</string>
     <string name="pref_server_title">Server</string>
     <string name="pref_server_auto">Auto</string>
@@ -15,7 +13,16 @@
     <string name="pref_user_none">No users found</string>
     <string name="pref_sign_out_title">Sign Out</string>
 
-    <!-- PIN Entry Dialog -->
+    <!-- Login -->
+    <string name="title_activity_login">Sign In</string>
+    <string name="login_with_password">Sign in with username/password</string>
+    <string name="login_username_hint">Username</string>
+    <string name="login_password_hint">Password</string>
+    <string name="login_btn_sign_in">Sign In</string>
+    <string name="login_with_qr">Sign in with QR code</string>
+    <string name="login_qr_instructions">Scan code (or go to plex.tv/link), then enter PIN shown below</string>
+    <string name="qr_code_description">QR Code</string>
+    <string name="error_login_button">Click to sign in</string>
     <string name="pin_entry_title">Enter PIN for %1$s</string>
     <string name="pin_entry_submit">Submit</string>
     <string name="pin_entry_cancel">Cancel</string>
@@ -23,6 +30,6 @@
     <string name="pin_error_digits">PIN must be 4 digits</string>
     <string name="user_switch_success">Switched user to %1$s</string>
     <string name="user_switch_failed">Failed to switch user: %1$s</string>
-    <string name="unknown">Unknown</string>
+    <string name="unknown_user">Unknown user</string>
     <string name="unknown_error">Unknown error</string>
 </resources>

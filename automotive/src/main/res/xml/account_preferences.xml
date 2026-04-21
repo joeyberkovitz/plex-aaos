@@ -5,26 +5,26 @@
     app:title="@string/title_activity_settings">
 
     <PreferenceCategory
-        android:title="Account">
+        android:title="@string/account_header">
 
-        <DropDownPreference
+        <ListPreference
             android:key="pref_server"
-            android:title="Server"
-            android:summary="Loading servers..."
+            android:title="@string/pref_server_title"
+            android:summary="@string/pref_server_auto"
             android:entries="@array/empty_array"
             android:entryValues="@array/empty_array"
             android:defaultValue="auto" />
 
-        <DropDownPreference
+        <ListPreference
             android:key="pref_switch_user"
-            android:title="Switch User"
-            android:summary="Loading users..."
+            android:title="@string/pref_user_title"
+            android:summary="@string/pref_user_summary"
             android:entries="@array/empty_array"
             android:entryValues="@array/empty_array" />
 
         <Preference
             android:key="pref_sign_out"
-            android:title="Sign Out"
+            android:title="@string/pref_sign_out_title"
             app:iconSpaceReserved="false" />
 
     </PreferenceCategory>

@@ -4,7 +4,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.DropDownPreference
+import androidx.preference.ListPreference
 import androidx.preference.Preference
 import com.android.car.ui.preference.PreferenceFragment
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +13,11 @@ import kotlinx.coroutines.withContext
 import us.berkovitz.plexapi.myplex.MyPlexResource
 import us.berkovitz.plexapi.myplex.MyPlexUser
 
-class SettingsFragment : PreferenceFragment() {
+class SettingsFragment : PreferenceFragment(), PinEntryDialogFragment.PinEntryListener {
+    // Pending PIN dialog state
+    private var pendingPinUserId: String? = null
+    private var pendingPinUserTitle: String? = null
+    private var showPendingPinDialog: Boolean = false
 
     private var plexToken: String? = null
     private lateinit var plexUtil: PlexUtil
@@ -24,6 +28,19 @@ class SettingsFragment : PreferenceFragment() {
 
         plexUtil = PlexUtil(requireContext())
         plexToken = plexUtil.getToken()
+
+        if (savedInstanceState != null) {
+            pendingPinUserId = savedInstanceState.getString("pendingPinUserId")
+            pendingPinUserTitle = savedInstanceState.getString("pendingPinUserTitle")
+            showPendingPinDialog = savedInstanceState.getBoolean("showPendingPinDialog")
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("pendingPinUserId", pendingPinUserId)
+        outState.putString("pendingPinUserTitle", pendingPinUserTitle)
+        outState.putBoolean("showPendingPinDialog", showPendingPinDialog)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -33,12 +50,25 @@ class SettingsFragment : PreferenceFragment() {
         setupSignOutPreference()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Show PIN dialog if needed
+        val userId = pendingPinUserId
+        val userTitle = pendingPinUserTitle
+        if (showPendingPinDialog && userId != null && userTitle != null) {
+            showPendingPinDialog = false
+            val dialog = PinEntryDialogFragment.newInstance(userTitle)
+            dialog.show(childFragmentManager, "PinEntryDialog")
+        }
+    }
+
+    // Server Preference
     private fun getServerText(server: MyPlexResource?): String {
-        return server?.name ?: "Auto"
+        return server?.name ?: getString(R.string.pref_server_auto)
     }
 
     private fun setupServerPreference() {
-        val serverPref = findPreference<DropDownPreference>("pref_server")
+        val serverPref = findPreference<ListPreference>("pref_server")
         serverPref?.isSelectable = false
         serverPref?.setOnPreferenceChangeListener { preference, newValue ->
             onServerPreferenceChange(preference, newValue)
@@ -53,7 +83,7 @@ class SettingsFragment : PreferenceFragment() {
             }
 
             if (servers.isNotEmpty()) {
-                val entries = mutableListOf("Auto")
+                val entries = mutableListOf(getString(R.string.pref_server_auto))
                 val entryValues = mutableListOf("auto")
 
                 entries.addAll(servers.map { it.name })
@@ -70,7 +100,7 @@ class SettingsFragment : PreferenceFragment() {
                 serverPref?.summary = getServerText(servers.find { it.clientIdentifier == currentServer })
             } else {
                 serverPref?.isEnabled = false
-                serverPref?.summary = "No servers found"
+                serverPref?.summary = getString(R.string.pref_server_none)
             }
 
             serverPref?.isSelectable = true
@@ -78,7 +108,7 @@ class SettingsFragment : PreferenceFragment() {
     }
 
     private fun onServerPreferenceChange(preference: Preference, newValue: Any?): Boolean {
-        if ((preference as DropDownPreference).value == newValue) {
+        if ((preference as ListPreference).value == newValue) {
             return true
         }
 
@@ -93,12 +123,13 @@ class SettingsFragment : PreferenceFragment() {
         return true
     }
 
+    // User Preference
     private fun getUserText(user: MyPlexUser?): String {
-        return user?.title ?: "Change the active Plex user"
+        return user?.title ?: getString(R.string.pref_user_summary)
     }
 
     private fun setupUserPreference() {
-        val userPref = findPreference<DropDownPreference>("pref_switch_user")
+        val userPref = findPreference<ListPreference>("pref_switch_user")
         userPref?.isSelectable = false
         userPref?.setOnPreferenceChangeListener { preference, newValue ->
             onUserPreferenceChange(preference, newValue)
@@ -120,15 +151,40 @@ class SettingsFragment : PreferenceFragment() {
                 userPref?.summary = getUserText(users.find { it.id.toString() == userPref.value })
             } else {
                 userPref?.isEnabled = false
-                userPref?.summary = "No users found"
+                userPref?.summary = getString(R.string.pref_user_none)
             }
 
             userPref?.isSelectable = true
         }
     }
 
+    private suspend fun performUserSwitch(userId: String, userTitle: String, pin: String? = null): String? {
+        val context = requireContext().applicationContext
+        val activity = activity as? SettingsActivity
+        return try {
+            val newToken = withContext(Dispatchers.IO) {
+                PlexUtil.switchUser(plexToken ?: "", userId, pin)
+            }
+            plexUtil.setToken(newToken)
+
+            val userPref = findPreference<ListPreference>("pref_switch_user")
+            userPref?.value = userId
+            userPref?.summary = userTitle
+
+            activity?.notifyRefresh()
+            Toast.makeText(context, getString(R.string.user_switch_success, userTitle), Toast.LENGTH_SHORT).show()
+            null
+        } catch (e: Exception) {
+            val errorMessage = e.message ?: getString(R.string.unknown_error)
+            if (pin == null) {
+                Toast.makeText(context, getString(R.string.user_switch_failed, errorMessage), Toast.LENGTH_SHORT).show()
+            }
+            errorMessage
+        }
+    }
+
     private fun onUserPreferenceChange(preference: Preference, newValue: Any?): Boolean {
-        if ((preference as DropDownPreference).value == newValue) {
+        if ((preference as ListPreference).value == newValue) {
             return true
         }
 
@@ -136,31 +192,42 @@ class SettingsFragment : PreferenceFragment() {
         val user = users.find { it.id.toString() == userId }
 
         if (user?.protected == 1) {
-            // TODO: Implement PIN dialog
-            Toast.makeText(
-                requireContext(),
-                "User is protected by PIN. Switching not yet supported for protected users.",
-                Toast.LENGTH_LONG
-            ).show()
-            return false
+            // Set pending PIN dialog state
+            pendingPinUserId = userId
+            pendingPinUserTitle = user.title
+            showPendingPinDialog = true
+
+            // Don't allow preference to update, we will update it if user switch succeeds
+            return false 
         } else {
-            val context = context?.applicationContext ?: return true
             lifecycleScope.launch {
-                try {
-                    val newToken = withContext(Dispatchers.IO) {
-                        PlexUtil.switchUser(plexToken ?: "", userId, null)
-                    }
-                    plexUtil.setToken(newToken)
-                    (activity as? SettingsActivity)?.notifyRefresh()
-                    Toast.makeText(context, "Switched user to ${user?.title}", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Failed to switch user: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
+                performUserSwitch(userId, user?.title ?: getString(R.string.unknown))
             }
-            return true
+            return false
         }
     }
 
+    // PinEntryListener implementation
+    override suspend fun onPinEntered(pin: String): String? {
+        val userId = pendingPinUserId ?: ""
+        val userTitle = pendingPinUserTitle ?: getString(R.string.unknown)
+
+        val error = performUserSwitch(userId, userTitle, pin)
+
+        if (error == null) {
+            // Clear pending state
+            pendingPinUserId = null
+            pendingPinUserTitle = null
+        }
+        return error
+    }
+
+    override fun onPinCancelled() {
+        pendingPinUserId = null
+        pendingPinUserTitle = null
+    }
+
+    // Sign Out Preference
     private fun setupSignOutPreference() {
         val signOutPref = findPreference<Preference>("pref_sign_out")
         signOutPref?.isEnabled = (plexToken != null)

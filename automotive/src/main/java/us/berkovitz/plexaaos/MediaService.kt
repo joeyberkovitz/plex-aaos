@@ -41,6 +41,8 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
+import androidx.media3.session.legacy.MediaSessionCompat
+import androidx.media3.session.legacy.PlaybackStateCompat
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -49,6 +51,7 @@ import com.google.common.util.concurrent.SettableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.berkovitz.plexaaos.extensions.id
 import us.berkovitz.plexaaos.library.BrowseTree
@@ -60,6 +63,7 @@ import us.berkovitz.plexaaos.library.buildMeta
 import us.berkovitz.plexapi.media.Track
 import us.berkovitz.plexapi.myplex.AuthorizationException
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.math.ceil
 import kotlin.math.min
@@ -102,22 +106,28 @@ class PlexMediaService : MediaLibraryService() {
                 Download.STATE_COMPLETED -> {
                     logger.debug("Download completed: ${download.request.id}")
                 }
+
                 Download.STATE_FAILED -> {
                     logger.error("Download failed: ${download.request.id}, error: ${finalException?.message}")
                 }
+
                 Download.STATE_DOWNLOADING -> {
                     val progress = download.percentDownloaded
                     logger.debug("Downloading: ${download.request.id}, progress: $progress%")
                 }
+
                 Download.STATE_QUEUED -> {
                     logger.debug("Download queued: ${download.request.id}")
                 }
+
                 Download.STATE_REMOVING -> {
                     logger.debug("Download removing: ${download.request.id}")
                 }
+
                 Download.STATE_RESTARTING -> {
                     logger.debug("Download restarting: ${download.request.id}")
                 }
+
                 Download.STATE_STOPPED -> {
                     logger.debug("Download stopped: ${download.request.id}")
                 }
@@ -161,49 +171,61 @@ class PlexMediaService : MediaLibraryService() {
         AndroidPlexApi.initPlexApi(this)
         plexUtil = PlexUtil(this)
 
+
+
+        player = newPlayer()
+        mediaLibrarySession = newLibrarySession()
+
+        requireLogin()
+//        checkInit()
+    }
+
+    fun newPlayer(): PlexPlayer {
         val cacheDataSourceFactory = CacheDataSource.Factory()
             .setCache(downloadCache)
             .setUpstreamDataSourceFactory(DefaultHttpDataSource.Factory())
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-
-        player = PlexPlayer(
+        return PlexPlayer(
             ExoPlayer.Builder(this)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(cacheDataSourceFactory))
-                .setLoadControl (
+                .setLoadControl(
                     DefaultLoadControl.Builder()
                         .setBufferDurationsMs(
-                            10*1000,
-                            5*60*1000,
-                            10*1000,
-                            10*1000,
+                            10 * 1000,
+                            5 * 60 * 1000,
+                            10 * 1000,
+                            10 * 1000,
                         )
                         .build()
                 )
                 .build().apply {
-                setAudioAttributes(uAmpAudioAttributes, true)
-                setHandleAudioBecomingNoisy(true)
-                addListener(playerListener)
-            }
+                    setAudioAttributes(uAmpAudioAttributes, true)
+                    setHandleAudioBecomingNoisy(true)
+                    addListener(playerListener)
+                }
         )
+    }
 
-        mediaLibrarySession = with(
-            MediaLibrarySession.Builder(
-                this, player, MediaLibraryCallback()
-            )
-        ) {
-            setId(packageName)
-            packageManager?.getLaunchIntentForPackage(packageName)?.let { sessionIntent ->
-                setSessionActivity(
-                    PendingIntent.getActivity(
-                        /* context= */ this@PlexMediaService,
-                        /* requestCode= */ 0,
-                        sessionIntent,
-                        FLAG_IMMUTABLE
-                    )
+    fun newLibrarySession() = with(
+        MediaLibrarySession.Builder(
+            this, player, MediaLibraryCallback()
+        )
+    ) {
+        setId(packageName)
+//        setLibraryErrorReplicationMode(
+//            MediaLibrarySession.LIBRARY_ERROR_REPLICATION_MODE_NONE  // stop errors bleeding into PlaybackState
+//        )
+        packageManager?.getLaunchIntentForPackage(packageName)?.let { sessionIntent ->
+            setSessionActivity(
+                PendingIntent.getActivity(
+                    /* context= */ this@PlexMediaService,
+                    /* requestCode= */ 0,
+                    sessionIntent,
+                    FLAG_IMMUTABLE
                 )
-            }
-            build()
+            )
         }
+        build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
@@ -215,11 +237,13 @@ class PlexMediaService : MediaLibraryService() {
         if (plexToken == null) {
             return false
         }
+        logger.info("token: " + plexToken)
 
         return true
     }
 
     fun loginCommand(future: SettableFuture<SessionResult>): Boolean {
+        logger.info("got login command")
         return refreshCommand(future, true)
     }
 
@@ -234,6 +258,7 @@ class PlexMediaService : MediaLibraryService() {
         login: Boolean = false
     ): Boolean {
         if (!isAuthenticated()) {
+            logger.warn("not logged in")
             future.set(
                 SessionResult(
                     getAuthSessionError()
@@ -242,31 +267,48 @@ class PlexMediaService : MediaLibraryService() {
             return false
         }
 
-        checkInit(!login)
+        checkInit(true)
         if (login) {
-            mediaSource.whenReady {
-                future.set(SessionResult(SessionResult.RESULT_SUCCESS))
+            // TODO: this causes a crash, which is better than the player being stuck with cached state, so leave this as-is
+            mediaLibrarySession = newLibrarySession()
+
+
+            logger.info("requesting whenReady")
+            mediaSource.whenReady { successfullyInitialized ->
+                logger.info("whenReady fired")
+                serviceScope.launch(Dispatchers.Main) {
+                    logger.info("whenReady coroutine")
+                    if (!successfullyInitialized) {
+                        future.set(SessionResult(getAuthSessionError()))
+                        return@launch
+                    }
+
+                    player = newPlayer()
+                    mediaLibrarySession = newLibrarySession()
+
+//                    mediaLibrarySession.clearReplicatedLibraryError()
+//                    mediaLibrarySession.setPlaybackException(null)
+//                    mediaLibrarySession.sessionExtras = Bundle.EMPTY
+//                    mediaLibrarySession.connectedControllers
+//                        .filter { it.packageName != packageName }
+//                        .forEach { controller ->
+//                            logger.info("notifying controller: ${controller.packageName}")
+//                            mediaLibrarySession.notifyChildrenChanged(controller, UAMP_BROWSABLE_ROOT, Integer.MAX_VALUE, null)
+//                            //mediaLibrarySession.notifyChildrenChanged(controller, UAMP_PLAYLISTS_ROOT, Integer.MAX_VALUE, null)
+//                        }
+//                    mediaLibrarySession.getSubscribedControllers("/").forEach {  }
+                    future.set(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
             }
-        } else {
-            future.set(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
-//        // Updated state (including clearing the error) now that the user has logged in.
-//        mediaSession.setPlaybackState(
-//            PlaybackStateCompat.Builder()
-//                .setState(PlaybackStateCompat.STATE_NONE, 0, 0F)
-//                .build()
-//        )
-//        mediaSessionConnector.setCustomErrorMessage(null)
-//        mediaSessionConnector.invalidateMediaSessionPlaybackState()
-//        mediaSessionConnector.invalidateMediaSessionMetadata()
-//        mediaSessionConnector.invalidateMediaSessionQueue()
-//        this.notifyChildrenChanged(UAMP_BROWSABLE_ROOT)
         return true
     }
 
     fun checkInit(force: Boolean = false) {
+        logger.info("check init")
         if (this::mediaSource.isInitialized && !force) {
+            logger.info("already init")
             return
         }
         // The media library is built from a remote JSON file. We'll create the source here,
@@ -276,6 +318,7 @@ class PlexMediaService : MediaLibraryService() {
             try {
                 mediaSource.load()
             } catch (exc: AuthorizationException) {
+                logger.info("load auth err, resetting auth")
                 plexUtil.clearToken()
                 requireLogin()
             } catch (exc: Exception) {
@@ -284,6 +327,7 @@ class PlexMediaService : MediaLibraryService() {
         }
 
         if (force) {
+            logger.info("updating music source")
             browseTree.updateMusicSource(mediaSource)
         }
     }
@@ -307,7 +351,11 @@ class PlexMediaService : MediaLibraryService() {
     }
 
     fun getAuthSessionError() =
-        SessionError(SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED, "sign in required", getExpiredAuthenticationResolutionExtras())
+        SessionError(
+            SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED,
+            "sign in required",
+            getExpiredAuthenticationResolutionExtras()
+        )
 
 
     private fun getExpiredAuthenticationResolutionExtras(): Bundle {
@@ -473,6 +521,7 @@ class PlexMediaService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
+            logger.info("onConnect")
             val connectionResult = super.onConnect(session, controller)
             val sessionCommands =
                 connectionResult.availableSessionCommands
@@ -558,12 +607,13 @@ class PlexMediaService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             isForPlayback: Boolean
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            logger.info("onPlaybackResumption")
+
             val emptyRes = MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
             if (!isAuthenticated()) {
                 return Futures.immediateFuture(emptyRes)
             }
 
-            logger.info("onPlaybackResumption")
             val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
 
             serviceScope.launch {
@@ -690,10 +740,13 @@ class PlexMediaService : MediaLibraryService() {
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
             return if (isAuthenticated()) {
+                logger.info("onGetChildren auth ${parentId}")
                 val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
                 onLoadChildren(parentId, future)
                 return future
             } else {
+                logger.info("onGetChildren noauth ${parentId}")
+                requireLogin()
                 Futures.immediateFuture(
                     LibraryResult.ofError(getAuthSessionError())
                 )
@@ -775,7 +828,7 @@ class PlexMediaService : MediaLibraryService() {
             val startIndex = items.indexOfFirst { it.mediaId == mediaItems[0].mediaId }
 
             // Prefetch next tracks using ExoPlayer's DownloadManager
-            prefetchNextTracks( 5)
+            prefetchNextTracks(5)
 
             return super.onSetMediaItems(
                 mediaSession,
@@ -848,16 +901,16 @@ class PlexMediaService : MediaLibraryService() {
 
     /** Called when swiping the activity away from recents. */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
         // The choice what to do here is app specific. Some apps stop playback, while others allow
         // playback to continue and allow users to stop it with the notification.
         releaseMediaSession()
         stopSelf()
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         releaseMediaSession()
+        super.onDestroy()
     }
 
 
@@ -879,7 +932,7 @@ class PlexMediaService : MediaLibraryService() {
         mediaLibrarySession.run {
             release()
             if (player.playbackState != Player.STATE_IDLE) {
-                //player.removeListener(playerListener)
+                player.removeListener(playerListener)
                 player.release()
             }
         }

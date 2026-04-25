@@ -64,6 +64,7 @@ class LoginActivity : AppCompatActivity() {
         accountManager.addAccountExplicitly(account, token, null)
         musicServiceConnection.sendCommand(LOGIN, Bundle.EMPTY) { _, result ->
             mResultBundle = Bundle()
+            setResult(RESULT_OK)
             finish()
         }
     }

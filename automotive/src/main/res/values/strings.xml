@@ -10,6 +10,7 @@
     <string name="pref_server_none">No servers found</string>
     <string name="pref_user_title">Switch User</string>
     <string name="pref_user_summary">Change the active Plex user</string>
+    <string name="pref_loading">Loading…</string>
     <string name="pref_user_none">No users found</string>
     <string name="pref_sign_out_title">Sign Out</string>
 
@@ -28,6 +29,7 @@
     <string name="pin_entry_cancel">Cancel</string>
     <string name="pin_entry_hint">PIN</string>
     <string name="pin_error_digits">PIN must be 4 digits</string>
+    <string name="user_switching">Switching user…</string>
     <string name="user_switch_success">Switched user to %1$s</string>
     <string name="user_switch_failed">Failed to switch user: %1$s</string>
     <string name="unknown_user">Unknown user</string>

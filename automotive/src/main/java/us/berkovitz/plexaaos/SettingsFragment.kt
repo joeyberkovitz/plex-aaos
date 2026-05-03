@@ -3,31 +3,27 @@ package us.berkovitz.plexaaos
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import com.android.car.ui.preference.PreferenceFragment
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import us.berkovitz.plexapi.myplex.MyPlexResource
-import us.berkovitz.plexapi.myplex.MyPlexUser
 
-class SettingsFragment : PreferenceFragment(), PinEntryDialogFragment.PinEntryListener {
+class SettingsFragment : PreferenceFragment() {
+    private val viewModel: SettingsViewModel by activityViewModels()
+
     // Pending PIN dialog state
     private var pendingPinUserId: String? = null
     private var pendingPinUserTitle: String? = null
     private var showPendingPinDialog: Boolean = false
 
-    private var plexToken: String? = null
-    private lateinit var plexUtil: PlexUtil
-    private var users: List<MyPlexUser> = emptyList()
-
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.account_preferences, rootKey)
-
-        plexUtil = PlexUtil(requireContext())
-        plexToken = plexUtil.getToken()
 
         if (savedInstanceState != null) {
             pendingPinUserId = savedInstanceState.getString("pendingPinUserId")
@@ -48,6 +44,96 @@ class SettingsFragment : PreferenceFragment(), PinEntryDialogFragment.PinEntryLi
         setupServerPreference()
         setupUserPreference()
         setupSignOutPreference()
+
+        // Observe view model
+        val serverPref = findPreference<ListPreference>("pref_server")
+        val userPref = findPreference<ListPreference>("pref_switch_user")
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    combine(viewModel.servers, viewModel.currentServerId) { servers, currentId ->
+                        servers to currentId
+                    }.collect { (servers, currentId) ->
+                        if (servers == null) {
+                            serverPref?.isEnabled = false
+                            serverPref?.summary = getString(R.string.pref_loading)
+                        } else if (servers.isEmpty()) {
+                            serverPref?.isEnabled = false
+                            serverPref?.summary = getString(R.string.pref_server_none)
+                        } else {
+                            serverPref?.isEnabled = true
+
+                            val entries = mutableListOf(getString(R.string.pref_server_auto))
+                            entries.addAll(servers.map { it.name })
+                            serverPref?.entries = entries.toTypedArray()
+
+                            val entryValues = mutableListOf(SERVER_ID_AUTO)
+                            entryValues.addAll(servers.map { it.clientIdentifier ?: "" })
+                            serverPref?.entryValues = entryValues.toTypedArray()
+
+                            serverPref?.value = currentId ?: SERVER_ID_AUTO
+                            serverPref?.summary = getServerText(servers.find { it.clientIdentifier == currentId })
+                        }
+                    }
+                }
+                launch {
+                    combine(viewModel.users, viewModel.userSwitchStatus) { users, status ->
+                        users to status
+                    }.collect { (users, status) ->
+                        if (users == null) {
+                            userPref?.isEnabled = false
+                            userPref?.summary = getString(R.string.pref_loading)
+                        } else if (users.isEmpty()) {
+                            userPref?.isEnabled = false
+                            userPref?.summary = getString(R.string.pref_user_none)
+                        } else {
+                            userPref?.entries = users.map { it.title }.toTypedArray()
+                            userPref?.entryValues = users.map { it.id.toString() }.toTypedArray()
+
+                            // Make sure the current value of the preference is always null so that
+                            // switching consistently works. The list returned by the API only
+                            // contains users *other* than the current one.
+                            userPref?.value = null
+                            when (status) {
+                                is UserSwitchStatus.Idle -> {
+                                    userPref?.isEnabled = true
+                                    userPref?.summary = getString(R.string.pref_user_summary)
+                                }
+                                is UserSwitchStatus.Switching -> {
+                                    userPref?.isEnabled = false
+                                    userPref?.summary = getString(R.string.user_switching)
+                                }
+                                is UserSwitchStatus.Success -> {
+                                    userPref?.isEnabled = true
+                                    val successString = getString(R.string.user_switch_success, status.userTitle)
+                                    userPref?.summary = successString
+                                    Toast.makeText(
+                                        requireContext(),
+                                        successString,
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                                is UserSwitchStatus.Error -> {
+                                    userPref?.isEnabled = true
+                                    val errorString = getString(R.string.user_switch_failed, status.message)
+                                    userPref?.summary = errorString
+                                    Toast.makeText(
+                                        requireContext(),
+                                        errorString,
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    }
+                }
+                launch {
+                    viewModel.signOutEvent.collect {
+                        activity?.finish()
+                    }
+                }
+            }
+        }
     }
 
     override fun onResume() {
@@ -57,7 +143,7 @@ class SettingsFragment : PreferenceFragment(), PinEntryDialogFragment.PinEntryLi
         val userTitle = pendingPinUserTitle
         if (showPendingPinDialog && userId != null && userTitle != null) {
             showPendingPinDialog = false
-            val dialog = PinEntryDialogFragment.newInstance(userTitle)
+            val dialog = PinEntryDialogFragment.newInstance(userId, userTitle)
             dialog.show(childFragmentManager, "PinEntryDialog")
         }
     }
@@ -69,170 +155,50 @@ class SettingsFragment : PreferenceFragment(), PinEntryDialogFragment.PinEntryLi
 
     private fun setupServerPreference() {
         val serverPref = findPreference<ListPreference>("pref_server")
-        serverPref?.isSelectable = false
-        serverPref?.setOnPreferenceChangeListener { preference, newValue ->
-            onServerPreferenceChange(preference, newValue)
+        serverPref?.setOnPreferenceChangeListener { _, newValue ->
+            val serverId = newValue as? String ?: return@setOnPreferenceChangeListener true
+            viewModel.setServer(serverId)
+            true
         }
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            val settingsActivity = activity as? SettingsActivity
-            val servers = settingsActivity?.cachedServers ?: withContext(Dispatchers.IO) {
-                val fetched = PlexUtil.getServers(plexToken ?: "")
-                settingsActivity?.cachedServers = fetched
-                fetched
-            }
-
-            if (servers.isNotEmpty()) {
-                val entries = mutableListOf(getString(R.string.pref_server_auto))
-                val entryValues = mutableListOf("auto")
-
-                entries.addAll(servers.map { it.name })
-                entryValues.addAll(servers.map { it.clientIdentifier ?: "" })
-
-                serverPref?.entries = entries.toTypedArray()
-                serverPref?.entryValues = entryValues.toTypedArray()
-
-                val currentServer = withContext(Dispatchers.IO) {
-                    AndroidStorage.getServer(requireContext())
-                }
-                serverPref?.isEnabled = true
-                serverPref?.value = currentServer ?: "auto"
-                serverPref?.summary = getServerText(servers.find { it.clientIdentifier == currentServer })
-            } else {
-                serverPref?.isEnabled = false
-                serverPref?.summary = getString(R.string.pref_server_none)
-            }
-
-            serverPref?.isSelectable = true
-        }
-    }
-
-    private fun onServerPreferenceChange(preference: Preference, newValue: Any?): Boolean {
-        if ((preference as ListPreference).value == newValue) {
-            return true
-        }
-
-        val serverId = newValue as? String ?: return true
-        val context = context?.applicationContext ?: return true
-        lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
-                AndroidStorage.setServer(if (serverId == "auto") null else serverId, context)
-            }
-            (activity as? SettingsActivity)?.notifyRefresh()
-        }
-        return true
     }
 
     // User Preference
-    private fun getUserText(user: MyPlexUser?): String {
-        return user?.title ?: getString(R.string.pref_user_summary)
-    }
-
     private fun setupUserPreference() {
         val userPref = findPreference<ListPreference>("pref_switch_user")
-        userPref?.isSelectable = false
+        userPref?.setOnPreferenceClickListener {
+            viewModel.resetSwitchStatus()
+            false
+        }
         userPref?.setOnPreferenceChangeListener { preference, newValue ->
-            onUserPreferenceChange(preference, newValue)
-        }
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            val settingsActivity = activity as? SettingsActivity
-            users = settingsActivity?.cachedUsers ?: withContext(Dispatchers.IO) {
-                val fetched = PlexUtil.getUsers(plexToken ?: "")
-                settingsActivity?.cachedUsers = fetched
-                fetched
+            if ((preference as ListPreference).value == newValue) {
+                return@setOnPreferenceChangeListener true
             }
 
-            if (users.isNotEmpty()) {
-                val entries = users.map { it.title }.toTypedArray()
-                val entryValues = users.map { it.id.toString() }.toTypedArray()
-                userPref?.entries = entries
-                userPref?.entryValues = entryValues
-                userPref?.summary = getUserText(users.find { it.id.toString() == userPref.value })
+            val userId = newValue as? String ?: return@setOnPreferenceChangeListener true
+            val user = viewModel.users.value?.find { it.id.toString() == userId }
+
+            if (user?.protected == 1) {
+                // Set pending PIN dialog state
+                pendingPinUserId = userId
+                pendingPinUserTitle = user.title
+                showPendingPinDialog = true
             } else {
-                userPref?.isEnabled = false
-                userPref?.summary = getString(R.string.pref_user_none)
+                viewModel.switchUser(userId, user?.title ?: getString(R.string.unknown_user), null)
             }
 
-            userPref?.isSelectable = true
+            // Don't allow preference to update - there's no point in doing this as the user list
+            // will reload after a successful switch, and the user list only contains users
+            // *other* than the currently selected one.
+            false
         }
-    }
-
-    private suspend fun performUserSwitch(userId: String, userTitle: String, pin: String? = null): String? {
-        val context = requireContext().applicationContext
-        val activity = activity as? SettingsActivity
-        return try {
-            val newToken = withContext(Dispatchers.IO) {
-                PlexUtil.switchUser(plexToken ?: "", userId, pin)
-            }
-            plexUtil.setToken(newToken)
-
-            val userPref = findPreference<ListPreference>("pref_switch_user")
-            userPref?.value = userId
-            userPref?.summary = userTitle
-
-            activity?.notifyRefresh()
-            Toast.makeText(context, getString(R.string.user_switch_success, userTitle), Toast.LENGTH_SHORT).show()
-            null
-        } catch (e: Exception) {
-            val errorMessage = e.message ?: getString(R.string.unknown_error)
-            if (pin == null) {
-                Toast.makeText(context, getString(R.string.user_switch_failed, errorMessage), Toast.LENGTH_SHORT).show()
-            }
-            errorMessage
-        }
-    }
-
-    private fun onUserPreferenceChange(preference: Preference, newValue: Any?): Boolean {
-        if ((preference as ListPreference).value == newValue) {
-            return true
-        }
-
-        val userId = newValue as? String ?: return true
-        val user = users.find { it.id.toString() == userId }
-
-        if (user?.protected == 1) {
-            // Set pending PIN dialog state
-            pendingPinUserId = userId
-            pendingPinUserTitle = user.title
-            showPendingPinDialog = true
-
-            // Don't allow preference to update, we will update it if user switch succeeds
-            return false 
-        } else {
-            lifecycleScope.launch {
-                performUserSwitch(userId, user?.title ?: getString(R.string.unknown_user))
-            }
-            return false
-        }
-    }
-
-    // PinEntryListener implementation
-    override suspend fun onPinEntered(pin: String): String? {
-        val userId = pendingPinUserId ?: ""
-        val userTitle = pendingPinUserTitle ?: getString(R.string.unknown_user)
-
-        val error = performUserSwitch(userId, userTitle, pin)
-
-        if (error == null) {
-            // Clear pending state
-            pendingPinUserId = null
-            pendingPinUserTitle = null
-        }
-        return error
-    }
-
-    override fun onPinCancelled() {
-        pendingPinUserId = null
-        pendingPinUserTitle = null
     }
 
     // Sign Out Preference
     private fun setupSignOutPreference() {
         val signOutPref = findPreference<Preference>("pref_sign_out")
-        signOutPref?.isEnabled = (plexToken != null)
+        signOutPref?.isEnabled = (viewModel.plexToken != null)
         signOutPref?.setOnPreferenceClickListener {
-            (activity as? SettingsActivity)?.signOut()
+            viewModel.signOut()
             true
         }
     }

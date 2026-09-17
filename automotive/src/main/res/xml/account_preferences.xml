@@ -5,6 +5,27 @@
     app:title="@string/title_activity_settings">
 
     <PreferenceCategory
+        android:title="@string/playback_header">
+
+        <ListPreference
+            android:key="pref_audio_quality"
+            android:title="@string/audio_quality_title"
+            android:summary="@string/audio_quality_summary"
+            android:entries="@array/audio_quality_entries"
+            android:entryValues="@array/audio_quality_values"
+            android:defaultValue="-1" />
+
+        <ListPreference
+            android:key="pref_transcode_quality"
+            android:title="@string/transcode_quality_title"
+            android:summary="@string/transcode_quality_summary"
+            android:entries="@array/transcode_quality_entries"
+            android:entryValues="@array/transcode_quality_values"
+            android:defaultValue="128" />
+        
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="@string/account_header">
 
         <ListPreference

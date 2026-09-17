@@ -4,6 +4,13 @@
 
     <!-- Settings -->
     <string name="title_activity_settings">Settings</string>
+
+    <string name="playback_header">Playback</string>
+    <string name="audio_quality_title">Audio Quality</string>
+    <string name="audio_quality_summary">Music above this bitrate will be transcoded to reduce bandwidth usage</string>
+    <string name="transcode_quality_title">Transcode Quality</string>
+    <string name="transcode_quality_summary">Target bitrate when transcoding (Opus codec)</string>
+
     <string name="account_header">Account</string>
     <string name="pref_server_title">Server</string>
     <string name="pref_server_auto">Auto</string>

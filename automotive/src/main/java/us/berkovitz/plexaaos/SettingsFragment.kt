@@ -41,6 +41,8 @@ class SettingsFragment : PreferenceFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        setupAudioQualityPreference()
+        setupTranscodeQualityPreference()
         setupServerPreference()
         setupUserPreference()
         setupSignOutPreference()
@@ -48,6 +50,8 @@ class SettingsFragment : PreferenceFragment() {
         // Observe view model
         val serverPref = findPreference<ListPreference>("pref_server")
         val userPref = findPreference<ListPreference>("pref_switch_user")
+        val audioPref = findPreference<ListPreference>("pref_audio_quality")
+        val transcodePref = findPreference<ListPreference>("pref_transcode_quality")
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
@@ -132,6 +136,16 @@ class SettingsFragment : PreferenceFragment() {
                         activity?.finish()
                     }
                 }
+                launch {
+                    viewModel.audioQuality.collect { quality ->
+                        audioPref?.value = quality.toString()
+                    }
+                }
+                launch {
+                    viewModel.transcodeQuality.collect { quality ->
+                        transcodePref?.value = quality.toString()
+                    }
+                }
             }
         }
     }
@@ -199,6 +213,26 @@ class SettingsFragment : PreferenceFragment() {
         signOutPref?.isEnabled = (viewModel.plexToken != null)
         signOutPref?.setOnPreferenceClickListener {
             viewModel.signOut()
+            true
+        }
+    }
+
+    private fun setupAudioQualityPreference() {
+        val audioPref = findPreference<ListPreference>("pref_audio_quality")
+        audioPref?.setOnPreferenceChangeListener { _, newValue ->
+            val qualityStr = newValue as? String ?: return@setOnPreferenceChangeListener true
+            val quality = qualityStr.toIntOrNull() ?: AndroidStorage.MAXIMUM_AUDIO_QUALITY
+            viewModel.setAudioQuality(quality)
+            true
+        }
+    }
+
+    private fun setupTranscodeQualityPreference() {
+        val transcodePref = findPreference<ListPreference>("pref_transcode_quality")
+        transcodePref?.setOnPreferenceChangeListener { _, newValue ->
+            val qualityStr = newValue as? String ?: return@setOnPreferenceChangeListener true
+            val quality = qualityStr.toIntOrNull() ?: AndroidStorage.DEFAULT_TRANSCODE_QUALITY
+            viewModel.setTranscodeQuality(quality)
             true
         }
     }

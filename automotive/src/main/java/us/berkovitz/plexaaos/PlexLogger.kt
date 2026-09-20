@@ -1,8 +1,8 @@
 package us.berkovitz.plexaaos
 
 import android.util.Log
-import com.google.firebase.crashlytics.ktx.crashlytics
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.crashlytics.crashlytics
+import com.google.firebase.Firebase
 import us.berkovitz.plexapi.logging.KotlinLoggingLogger
 import us.berkovitz.plexapi.logging.Logger
 import us.berkovitz.plexapi.logging.LoggingFactory

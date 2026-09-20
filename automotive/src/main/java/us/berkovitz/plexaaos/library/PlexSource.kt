@@ -73,7 +73,7 @@ class PlexSource(
             if (playlist == null) {
                 logger.warn("Playlist $playlistId missing from catalog")
                 if (plexServer == null) {
-                    findServer()
+                    PlexUtil.findServer(context, plexToken)
                 }
                 val playlistIdLong = playlistId.toLongOrNull()
                 if (playlistIdLong == null) {
@@ -107,7 +107,7 @@ class PlexSource(
 
     private suspend fun updateCatalog(): Int {
         return withContext(Dispatchers.IO) {
-            findServer()
+            plexServer = PlexUtil.findServer(context, plexToken)
             if (plexServer == null) {
                 return@withContext STATE_ERROR
             }
@@ -125,42 +125,5 @@ class PlexSource(
         }
     }
 
-    private suspend fun findServer() {
-        if (plexServer != null)
-            return
 
-        val selectedServer = AndroidStorage.getServer(context)
-
-        //TODO: if setting is changed, need to force a reload
-        val servers = PlexUtil.getServers(plexToken)
-        for (server in servers) {
-            // If a server is set, force that one
-            if(selectedServer != null && server.clientIdentifier != selectedServer){
-                continue
-            }
-
-            var hasRemote = false
-            if (server.connections != null) {
-                for (conn in server.connections!!) {
-                    if (conn.local == 0) {
-                        val connUrl = conn.uri
-                        val overrideToken = server.accessToken
-                        val potentialServer = PlexServer(connUrl, overrideToken ?: plexToken)
-                        logger.debug("Trying server: $connUrl")
-                        if (potentialServer.testConnection()) {
-                            logger.debug("Connection succeeded")
-                            hasRemote = true
-                            plexServer = potentialServer
-                            break
-                        } else {
-                            logger.debug("Connection failed")
-                        }
-                    }
-                }
-                if (hasRemote) {
-                    break
-                }
-            }
-        }
-    }
 }

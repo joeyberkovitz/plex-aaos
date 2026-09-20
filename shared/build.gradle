@@ -10,7 +10,6 @@ repositories {
 }
 
 
-
 android {
     signingConfigs {
         release {
@@ -21,16 +20,25 @@ android {
         }
     }
     namespace 'us.berkovitz.plexaaos.shared'
-    compileSdkVersion 33
+    compileSdkVersion 37
 
     defaultConfig {
         minSdkVersion 28
-        targetSdkVersion 33
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         signingConfig signingConfigs.release
     }
+    lint {
+        targetSdk 33
+    }
+    testOptions {
+        targetSdk 33
+    }
+    kotlinOptions {
+        jvmTarget = '11'
+    }
 }
 
 dependencies {
+    implementation 'androidx.core:core-ktx:1.19.0'
 }

@@ -6,7 +6,6 @@ import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.content.Intent
 import android.os.Bundle
-import android.support.v4.media.MediaMetadataCompat
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -43,16 +42,23 @@ import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import androidx.media3.session.legacy.MediaSessionCompat
 import androidx.media3.session.legacy.PlaybackStateCompat
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkRequest
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import us.berkovitz.plexaaos.data.cache.CacheWorker
+import us.berkovitz.plexaaos.data.repositories.MediaItemRepository
+import us.berkovitz.plexaaos.data.repositories.PlaylistRepository
 import us.berkovitz.plexaaos.extensions.id
 import us.berkovitz.plexaaos.library.BrowseTree
 import us.berkovitz.plexaaos.library.MusicSource
@@ -65,15 +71,21 @@ import us.berkovitz.plexapi.myplex.AuthorizationException
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.Executors
+import javax.inject.Inject
 import kotlin.math.ceil
 import kotlin.math.min
 
+@AndroidEntryPoint
 class PlexMediaService : MediaLibraryService() {
     companion object {
         val logger = PlexLoggerFactory.loggerFor(PlexMediaService::class)
         val PAGE_SIZE = BrowseTree.PAGE_SIZE
     }
 
+    @Inject
+    internal lateinit var playlistRepository: PlaylistRepository
+    @Inject
+    internal lateinit var mediaItemRepository: MediaItemRepository
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
@@ -318,12 +330,17 @@ class PlexMediaService : MediaLibraryService() {
         return true
     }
 
+    val cacheWorkRequest: WorkRequest = OneTimeWorkRequestBuilder<CacheWorker>().build()
+
     fun checkInit(force: Boolean = false) {
         logger.info("check init")
         if (this::mediaSource.isInitialized && !force) {
             logger.info("already init")
             return
         }
+
+        WorkManager.getInstance(applicationContext).enqueue(cacheWorkRequest)
+
         // The media library is built from a remote JSON file. We'll create the source here,
         // and then use a suspend function to perform the download off the main thread.
         mediaSource = PlexSource(plexToken!!, this)

@@ -5,7 +5,6 @@ import android.content.ComponentName
 import android.os.Bundle
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +44,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _currentServerId = MutableStateFlow<String?>(SERVER_ID_AUTO)
     val currentServerId: StateFlow<String?> = _currentServerId.asStateFlow()
 
+    private val _audioQuality = MutableStateFlow<Int>(AndroidStorage.MAXIMUM_AUDIO_QUALITY)
+    val audioQuality: StateFlow<Int> = _audioQuality.asStateFlow()
+
+    private val _transcodeQuality = MutableStateFlow<Int>(AndroidStorage.DEFAULT_TRANSCODE_QUALITY)
+    val transcodeQuality: StateFlow<Int> = _transcodeQuality.asStateFlow()
+
     private val _userSwitchStatus = MutableStateFlow<UserSwitchStatus>(UserSwitchStatus.Idle)
     val userSwitchStatus: StateFlow<UserSwitchStatus> = _userSwitchStatus.asStateFlow()
 
@@ -63,6 +68,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     AndroidStorage.getServer(getApplication())
                 }
                 _currentServerId.value = savedServerId ?: SERVER_ID_AUTO
+            }
+            launch {
+                val savedAudioQuality = withContext(Dispatchers.IO) {
+                    AndroidStorage.getAudioQuality(getApplication())
+                }
+                _audioQuality.value = savedAudioQuality
+            }
+            launch {
+                val savedTranscodeQuality = withContext(Dispatchers.IO) {
+                    AndroidStorage.getTranscodeQuality(getApplication())
+                }
+                _transcodeQuality.value = savedTranscodeQuality
             }
             launch {
                 try {
@@ -95,6 +112,32 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 AndroidStorage.setServer(idToSave, getApplication())
             }
             _currentServerId.value = serverId ?: SERVER_ID_AUTO
+            withContext(Dispatchers.Main) {
+                notifyRefresh()
+            }
+        }
+    }
+
+    fun setAudioQuality(quality: Int) {
+        if (quality == _audioQuality.value) return
+        applicationScope.launch {
+            withContext(Dispatchers.IO) {
+                AndroidStorage.setAudioQuality(quality, getApplication())
+            }
+            _audioQuality.value = quality
+            withContext(Dispatchers.Main) {
+                notifyRefresh()
+            }
+        }
+    }
+
+    fun setTranscodeQuality(quality: Int) {
+        if (quality == _transcodeQuality.value) return
+        applicationScope.launch {
+            withContext(Dispatchers.IO) {
+                AndroidStorage.setTranscodeQuality(quality, getApplication())
+            }
+            _transcodeQuality.value = quality
             withContext(Dispatchers.Main) {
                 notifyRefresh()
             }

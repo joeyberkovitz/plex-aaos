@@ -1,13 +1,40 @@
 <resources>
-    <!-- Reply Preference -->
-    <string-array name="reply_entries">
-        <item>Reply</item>
-        <item>Reply to all</item>
+    <!-- Audio Quality Preference -->
+    <string-array name="audio_quality_entries">
+        <item>Maximum (never transcode)</item>
+        <item>320 kbps</item>
+        <item>256 kbps</item>
+        <item>192 kbps</item>
+        <item>160 kbps</item>
+        <item>128 kbps</item>
     </string-array>
 
-    <string-array name="reply_values">
-        <item>reply</item>
-        <item>reply_all</item>
+    <string-array name="audio_quality_values">
+        <item>-1</item>
+        <item>320</item>
+        <item>256</item>
+        <item>192</item>
+        <item>160</item>
+        <item>128</item>
+    </string-array>
+
+    <!-- Transcode Quality Preference -->
+    <string-array name="transcode_quality_entries">
+        <item>256 kbps</item>
+        <item>192 kbps</item>
+        <item>160 kbps</item>
+        <item>128 kbps</item>
+        <item>96 kbps</item>
+        <item>64 kbps</item>
+    </string-array>
+
+    <string-array name="transcode_quality_values">
+        <item>256</item>
+        <item>192</item>
+        <item>160</item>
+        <item>128</item>
+        <item>96</item>
+        <item>64</item>
     </string-array>
 
     <string-array name="empty_array">

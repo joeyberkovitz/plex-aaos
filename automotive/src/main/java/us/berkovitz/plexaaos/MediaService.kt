@@ -995,6 +995,15 @@ class PlexMediaService : MediaLibraryService() {
                 val uri = meta.localConfiguration?.uri ?: continue
                 val id = meta.mediaId
 
+                // Only prefetch tracks that wouldn't be transcoded. The Plex Transcoding API
+                // only supports a single transcoding session per device.
+                val extras = meta.mediaMetadata.extras
+                val transcodeUri = extras?.getString("TRANSCODE_URI")
+                if (transcodeUri != null && uri.toString() == transcodeUri) {
+                    logger.warn("Skipping prefetch for transcoded track at index $windowIndex: $id")
+                    continue
+                }
+
                 try {
                     // Create download request for the track
                     val downloadRequest = DownloadRequest.Builder(id, uri)
@@ -1090,6 +1099,32 @@ class PlexMediaService : MediaLibraryService() {
             ) {
                 message = "media not found";
             }
+
+            val mediaItem = player.currentMediaItem
+            if (mediaItem != null) {
+                val extras = mediaItem.mediaMetadata.extras
+                val transcodeUri = extras?.getString("TRANSCODE_URI")
+                val rawUri = extras?.getString("URI")
+                val currentUri = mediaItem.localConfiguration?.uri?.toString()
+
+                if (transcodeUri != null && rawUri != null && currentUri == transcodeUri) {
+                    logger.warn("Transcoding failed for ${currentUri}, falling back to raw stream at $rawUri")
+                    message = "transcoding failed"
+
+                    val newMediaItem = mediaItem.buildUpon()
+                        .setUri(rawUri)
+                        .build()
+
+                    val currentIndex = player.currentMediaItemIndex
+                    val playbackPosition = player.currentPosition
+
+                    player.replaceMediaItem(currentIndex, newMediaItem)
+                    player.seekTo(currentIndex, playbackPosition)
+                    player.prepare()
+                    player.play()
+                }
+            }
+
             Toast.makeText(
                 applicationContext,
                 message,

@@ -41,8 +41,8 @@ android {
         applicationId "us.berkovitz.plexaaos"
         minSdk 29
         targetSdk 37
-        versionCode 38
-        versionName "0.8.5"
+        versionCode 39
+        versionName "0.9.0"
 
         buildFeatures {
             buildConfig = true

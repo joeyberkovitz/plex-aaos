@@ -10,8 +10,10 @@ data class MediaItemEntity(
     val name: String,
     val artistName: String,
     val albumName: String,
+    val key: String,
     val uri: String,
     val durationMs: Long,
     val iconUri: String?,
     val updatedAt: Long,
+    val bitrate: Int,
 )

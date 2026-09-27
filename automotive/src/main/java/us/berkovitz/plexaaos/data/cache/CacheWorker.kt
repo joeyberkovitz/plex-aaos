@@ -112,10 +112,12 @@ class CacheWorker @AssistedInject constructor(
                 it.title,
                 artistName ?: "",
                 it.parentTitle ?: "",
+                it.key,
                 it.media?.first()?.parts?.first()?.key ?: "",
                 it.duration,
                 itemIcon,
                 it.updatedAt?.toLongOrNull() ?: 0,
+                it.media?.first()?.bitrate ?: 0,
             )
         }.toTypedArray()))
 

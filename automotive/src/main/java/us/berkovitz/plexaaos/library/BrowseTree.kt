@@ -215,6 +215,8 @@ fun MediaItem.Builder.buildMeta(
 fun MediaItem.Builder.buildMeta(
     server: PlexServer,
     mediaItem: MediaItemEntity,
+    audioQuality: Int,
+    transcodeQuality: Int,
     playlistId: String? = null,
     pageNum: String? = null
 ): MediaItem {
@@ -240,6 +242,22 @@ fun MediaItem.Builder.buildMeta(
         iconUri = AlbumArtContentProvider.mapUri(iconUrl.toUri())
     }
 
+    val mediaBitrate = mediaItem.bitrate
+    val shouldTranscode = audioQuality != AndroidStorage.MAXIMUM_AUDIO_QUALITY && mediaBitrate > audioQuality
+
+    var transcodeUri: String? = null
+    if(shouldTranscode) {
+        val track = Track(mediaItem.id, mediaItem.key, 0, 0, "",
+            null, null, null, "Track", mediaItem.name, mediaItem.name,
+            null, null, null, null,null,
+            null, null, null, null, null, null, null, 0,
+            0, null, null, null, null, null, null, null,
+            null, mediaItem.durationMs, null, mediaItem.updatedAt.toString(), null, null,
+            )
+        track.setServer(server)
+        transcodeUri = track.getTranscodeStreamUrl(audioQuality)
+    }
+
     val mediaUri = server.urlFor(mediaItem.uri)
 
     setMediaMetadata(MediaMetadata.Builder().apply {
@@ -259,11 +277,15 @@ fun MediaItem.Builder.buildMeta(
         setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
         setExtras(Bundle().apply {
             this.putString("URI", mediaUri)
+            this.putString("TRANSCODE_URI", transcodeUri)
         })
     }.build())
 
-    val uri = mediaUri.toUri()
-    setUri(uri)
+    if (shouldTranscode && transcodeUri != null) {
+        setUri(transcodeUri.toUri())
+    } else {
+        setUri(mediaUri.toUri())
+    }
     return this.build()
 }
 

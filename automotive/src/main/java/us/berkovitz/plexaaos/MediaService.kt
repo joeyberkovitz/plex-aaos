@@ -97,6 +97,8 @@ class PlexMediaService : MediaLibraryService() {
     lateinit var plexUtil: PlexUtil
     private var plexToken: String? = null
     var plexServer: PlexServer? = null
+    var audioQuality: Int = AndroidStorage.MAXIMUM_AUDIO_QUALITY
+    var transcodeQuality: Int = AndroidStorage.DEFAULT_TRANSCODE_QUALITY
 
     @Inject
     internal lateinit var mediaSource: PlexDBSource
@@ -360,6 +362,9 @@ class PlexMediaService : MediaLibraryService() {
     fun checkInit() {
         if (plexServer == null) {
             serviceScope.launch {
+                audioQuality = AndroidStorage.getAudioQuality(applicationContext)
+                transcodeQuality = AndroidStorage.getTranscodeQuality(applicationContext)
+
                 val server = PlexUtil.findServer(applicationContext, plexToken!!)
                 if (server == null) {
                     logger.error("failed to get server")
@@ -468,7 +473,7 @@ class PlexMediaService : MediaLibraryService() {
 
         if (parentMediaId == UAMP_PLAYLISTS_ROOT) {
             logger.info("loading")
-            val playlists = lastPlaylists.map {
+            val playlists = lastPlaylists.sortedBy { it.name }.map {
                 MediaItem.Builder().from(plexServer!!, it).build()
             }
             logger.info("Sending ${playlists.size} results for $parentMediaId")
@@ -576,7 +581,8 @@ class PlexMediaService : MediaLibraryService() {
 
                 playlistItems.forEach { item ->
                     children += MediaItem.Builder()
-                        .buildMeta(plexServer!!, item, playlistId, pageNum?.toString())
+                        .buildMeta(plexServer!!, item,
+                            audioQuality, transcodeQuality, playlistId, pageNum?.toString())
                 }
                 logger.info("Sending playlist results: ${children.size} ${playlistId}")
                 future.set(children)
@@ -931,7 +937,8 @@ class PlexMediaService : MediaLibraryService() {
                 }
 
                 items = playlistRepository.getPlaylistSongs(playlistId.toLong()).map {
-                    val mi = MediaItem.Builder().buildMeta(server!!, it, playlistId, pageNum)
+                    val mi = MediaItem.Builder().buildMeta(server!!, it,
+                        audioQuality, transcodeQuality, playlistId, pageNum)
                     logger.info("URI: ${mi.localConfiguration?.uri}")
                     mi
                 }

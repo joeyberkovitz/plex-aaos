@@ -3,8 +3,6 @@ package us.berkovitz.plexaaos
 import android.accounts.Account
 import android.accounts.AccountManager
 import android.content.Context
-import android.os.Bundle
-import us.berkovitz.plexaaos.library.PlexSource
 import us.berkovitz.plexapi.config.Config
 import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.MyPlexAccount
@@ -13,7 +11,6 @@ import us.berkovitz.plexapi.myplex.MyPlexUser
 
 class PlexUtil(private val ctx: Context) {
     private var accountManager = AccountManager.get(ctx)
-
     fun getToken(): String? {
         val accounts = accountManager.getAccountsByType(Authenticator.ACCOUNT_TYPE)
         if (accounts.isEmpty()) {
@@ -36,6 +33,7 @@ class PlexUtil(private val ctx: Context) {
         )
         val finalToken = Config.X_PLEX_IDENTIFIER + "|" + token
         accountManager.setPassword(account, finalToken)
+        plexServer = null
     }
 
     fun clearToken() {
@@ -47,6 +45,9 @@ class PlexUtil(private val ctx: Context) {
     }
 
     companion object {
+        val logger = PlexLoggerFactory.loggerFor(PlexUtil::class)
+        private var plexServer: PlexServer? = null
+
         suspend fun getServers(token: String): List<MyPlexResource> {
             if (token.isEmpty()) {
                 return emptyList()
@@ -77,6 +78,46 @@ class PlexUtil(private val ctx: Context) {
         suspend fun switchUser(token: String, userId: String, pin: String?): String {
             val plexAccount = MyPlexAccount(token)
             return plexAccount.switchUser(userId, pin)
+        }
+
+        suspend fun findServer(ctx: Context, token: String): PlexServer? {
+            if (plexServer != null)
+                return plexServer
+
+            val selectedServer = AndroidStorage.getServer(ctx)
+
+            //TODO: if setting is changed, need to force a reload
+            val servers = PlexUtil.getServers(token)
+            for (server in servers) {
+                // If a server is set, force that one
+                if(selectedServer != null && server.clientIdentifier != selectedServer){
+                    continue
+                }
+
+                var hasRemote = false
+                if (server.connections != null) {
+                    for (conn in server.connections!!) {
+                        if (conn.local == 0) {
+                            val connUrl = conn.uri
+                            val overrideToken = server.accessToken
+                            val potentialServer = PlexServer(connUrl, overrideToken ?: token)
+                            logger.debug("Trying server: $connUrl")
+                            if (potentialServer.testConnection()) {
+                                logger.debug("Connection succeeded")
+                                hasRemote = true
+                                plexServer = potentialServer
+                                break
+                            } else {
+                                logger.debug("Connection failed")
+                            }
+                        }
+                    }
+                    if (hasRemote) {
+                        break
+                    }
+                }
+            }
+            return plexServer
         }
     }
 }

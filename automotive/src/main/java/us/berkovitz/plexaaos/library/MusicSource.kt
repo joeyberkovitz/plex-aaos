@@ -19,6 +19,7 @@ package us.berkovitz.plexaaos.library
 import android.os.Bundle
 import android.support.v4.media.MediaMetadataCompat
 import androidx.annotation.IntDef
+import us.berkovitz.plexaaos.data.media.PlaylistEntity
 import us.berkovitz.plexapi.media.MediaItem
 import us.berkovitz.plexapi.media.Playlist
 
@@ -28,16 +29,16 @@ import us.berkovitz.plexapi.media.Playlist
  * Because Kotlin provides methods such as [Iterable.find] and [Iterable.filter],
  * this is a convenient interface to have on sources.
  */
-interface MusicSource : Iterable<Playlist> {
+interface MusicSource : Iterable<PlaylistEntity> {
 
     /**
      * Begins loading the data for this music source.
      */
     suspend fun load()
 
-    suspend fun loadPlaylist(playlistId: String): Playlist?
+    suspend fun loadPlaylist(playlistId: String): PlaylistEntity?
 
-    fun getPlaylist(playlistId: String): Playlist?
+    fun getPlaylist(playlistId: String): PlaylistEntity?
     fun playlistIterator(playlistId: String): Iterator<MediaItem>?
 
     fun getPlaylistItems(playlistId: String): Array<MediaItem>?
@@ -51,7 +52,7 @@ interface MusicSource : Iterable<Playlist> {
      */
     fun whenReady(performAction: (Boolean) -> Unit): Boolean
 
-    fun playlistWhenReady(playlistId: String, performAction: (Playlist?) -> Unit): Boolean
+    fun playlistWhenReady(playlistId: String, performAction: (PlaylistEntity?) -> Unit): Boolean
 
     fun search(query: String, extras: Bundle): List<MediaMetadataCompat>
 }
@@ -107,13 +108,13 @@ abstract class AbstractMusicSource : MusicSource {
 
 
     private val playlistState: MutableMap<String, Int> = hashMapOf()
-    private val playlistReadyListeners = mutableMapOf<String, MutableList<(Playlist?) -> Unit>>()
+    private val playlistReadyListeners = mutableMapOf<String, MutableList<(PlaylistEntity?) -> Unit>>()
 
     fun getPlaylistState(playlistId: String): Int {
         return playlistState[playlistId] ?: STATE_CREATED
     }
 
-    fun setPlaylistState(playlistId: String, playlist: Playlist?, state: Int){
+    fun setPlaylistState(playlistId: String, playlist: PlaylistEntity?, state: Int){
         synchronized(playlistState) {
             if (state == STATE_INITIALIZED || state == STATE_ERROR) {
                 synchronized(playlistReadyListeners) {
@@ -149,7 +150,7 @@ abstract class AbstractMusicSource : MusicSource {
             }
         }
 
-    override fun playlistWhenReady(playlistId: String, performAction: (Playlist?) -> Unit): Boolean =
+    override fun playlistWhenReady(playlistId: String, performAction: (PlaylistEntity?) -> Unit): Boolean =
         synchronized(playlistState) {
             when (playlistState[playlistId]) {
                 null, STATE_CREATED, STATE_INITIALIZING -> {

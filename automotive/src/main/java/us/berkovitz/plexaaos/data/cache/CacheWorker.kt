@@ -47,6 +47,12 @@ class CacheWorker @AssistedInject constructor(
 
         val playlists = server.playlists(PlaylistType.AUDIO)
         Log.i("CACHE", "got playlists: ${playlists.contentToString()}")
+
+        val seenIds = playlists.map { it.ratingKey }.filterNotNull().toLongArray()
+        val toDelete = plexDatabase.playlistDao().getAllPlaylists().filter { !seenIds.contains(it.id) }.map { it.id }.toLongArray()
+        plexDatabase.playlistDao().deletePlaylistEntriesByPlaylistID(*toDelete)
+        plexDatabase.playlistDao().deletePlaylists(*toDelete)
+
         for (playlist in playlists) {
             cachePlaylist(playlist, server)
         }
@@ -106,16 +112,17 @@ class CacheWorker @AssistedInject constructor(
                 it.title,
                 artistName ?: "",
                 it.parentTitle ?: "",
-                it.getStreamUrl(),
+                it.media?.first()?.parts?.first()?.key ?: "",
                 it.duration,
                 itemIcon,
                 it.updatedAt?.toLongOrNull() ?: 0,
             )
         }.toTypedArray()))
 
-        var playlistIconUri: String? = playlist.composite
-        if(playlistIconUri.isNullOrEmpty()) {
-            playlistIconUri = playlist.icon
+        val playlistIconUri: String? = if(!playlist.composite.isNullOrEmpty() && playlist.icon.isNullOrEmpty()) {
+            playlist.composite
+        } else {
+            null
         }
 
         // only mark the playlist updated if entries are created as well

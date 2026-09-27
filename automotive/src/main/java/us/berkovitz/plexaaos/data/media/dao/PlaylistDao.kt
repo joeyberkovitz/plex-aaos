@@ -32,7 +32,11 @@ data class PlaylistWithSongs(
 interface PlaylistDao {
     @Transaction
     @Query("SELECT * FROM PlaylistEntity")
-    fun getAllPlaylists(): Flow<List<PlaylistEntity>>
+    fun playlistFlow(): Flow<List<PlaylistEntity>>
+
+    @Transaction
+    @Query("SELECT * FROM PlaylistEntity")
+    suspend fun getAllPlaylists(): List<PlaylistEntity>
 
     @Transaction
     @Query("SELECT * FROM PlaylistEntity WHERE id=:id")
@@ -48,9 +52,14 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPlaylistEntries(vararg playlistEntries: PlaylistEntry)
 
-    @Delete
-    suspend fun deletePlaylists(vararg playlist: PlaylistEntity)
+    @Transaction
+    @Query("DELETE FROM PlaylistEntity WHERE id IN (:id);")
+    suspend fun deletePlaylists(vararg id: Long)
+
+    @Transaction
+    @Query("DELETE FROM PlaylistEntry WHERE playlistId IN (:playlistID)")
+    suspend fun deletePlaylistEntriesByPlaylistID(vararg playlistID: Long)
 
     @Delete
-    suspend fun deletePlaylistEntries(vararg playlistEntries: PlaylistEntry)
+    suspend fun deletePlaylistEntries(vararg playlistEntry: PlaylistEntry)
 }

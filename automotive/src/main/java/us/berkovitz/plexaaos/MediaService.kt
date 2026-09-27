@@ -26,7 +26,6 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -40,11 +39,13 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
-import androidx.media3.session.legacy.MediaSessionCompat
-import androidx.media3.session.legacy.PlaybackStateCompat
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.WorkRequest
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -54,23 +55,23 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import us.berkovitz.plexaaos.data.cache.CacheWorker
+import us.berkovitz.plexaaos.data.media.MediaItemEntity
+import us.berkovitz.plexaaos.data.media.PlaylistEntity
 import us.berkovitz.plexaaos.data.repositories.MediaItemRepository
 import us.berkovitz.plexaaos.data.repositories.PlaylistRepository
-import us.berkovitz.plexaaos.extensions.id
-import us.berkovitz.plexaaos.library.BrowseTree
-import us.berkovitz.plexaaos.library.MusicSource
-import us.berkovitz.plexaaos.library.PlexSource
+import us.berkovitz.plexaaos.library.PlexDBSource
 import us.berkovitz.plexaaos.library.UAMP_BROWSABLE_ROOT
 import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
+import us.berkovitz.plexaaos.library.browsableRootMediaItems
 import us.berkovitz.plexaaos.library.buildMeta
-import us.berkovitz.plexapi.media.Track
+import us.berkovitz.plexaaos.library.from
+import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.AuthorizationException
 import java.io.File
-import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.math.ceil
 import kotlin.math.min
@@ -79,11 +80,12 @@ import kotlin.math.min
 class PlexMediaService : MediaLibraryService() {
     companion object {
         val logger = PlexLoggerFactory.loggerFor(PlexMediaService::class)
-        val PAGE_SIZE = BrowseTree.PAGE_SIZE
+        val PAGE_SIZE = 100
     }
 
     @Inject
     internal lateinit var playlistRepository: PlaylistRepository
+
     @Inject
     internal lateinit var mediaItemRepository: MediaItemRepository
 
@@ -94,11 +96,10 @@ class PlexMediaService : MediaLibraryService() {
     lateinit var player: PlexPlayer
     lateinit var plexUtil: PlexUtil
     private var plexToken: String? = null
-    private lateinit var mediaSource: MusicSource
-    private val browseTree: BrowseTree by lazy {
-        BrowseTree(applicationContext, mediaSource)
-    }
+    var plexServer: PlexServer? = null
 
+    @Inject
+    internal lateinit var mediaSource: PlexDBSource
     private var mBrowser: MediaSession.ControllerInfo? = null
 
     // ExoPlayer cache infrastructure
@@ -179,19 +180,24 @@ class PlexMediaService : MediaLibraryService() {
         .build()
     private val playerListener = PlayerEventListener()
 
+    private var lastPlaylists: List<PlaylistEntity> = emptyList()
+
     override fun onCreate() {
         super.onCreate()
 
         AndroidPlexApi.initPlexApi(this)
         plexUtil = PlexUtil(this)
-
-
-
         player = newPlayer()
         mediaLibrarySession = newLibrarySession()
 
+        serviceScope.launch {
+            playlistRepository.playlistFlow.collect { it ->
+                notifyChange(it.map { it.id.toString() })
+                lastPlaylists = it
+            }
+        }
+
         requireLogin()
-//        checkInit()
     }
 
     fun newPlayer(): PlexPlayer {
@@ -226,9 +232,6 @@ class PlexMediaService : MediaLibraryService() {
         )
     ) {
         setId(packageName)
-//        setLibraryErrorReplicationMode(
-//            MediaLibrarySession.LIBRARY_ERROR_REPLICATION_MODE_NONE  // stop errors bleeding into PlaybackState
-//        )
         packageManager?.getLaunchIntentForPackage(packageName)?.let { sessionIntent ->
             setSessionActivity(
                 PendingIntent.getActivity(
@@ -251,8 +254,6 @@ class PlexMediaService : MediaLibraryService() {
         if (plexToken == null) {
             return false
         }
-        logger.info("token: " + plexToken)
-
         return true
     }
 
@@ -282,84 +283,119 @@ class PlexMediaService : MediaLibraryService() {
         }
 
         logger.info("refreshCommand")
+        initCacheSync()
 
         // https://github.com/androidx/media/issues/561
         // notifySearchResultChanged is the magic answer to making media3 behave
-        mBrowser?.let {
-            mediaLibrarySession.notifySearchResultChanged(it, UAMP_BROWSABLE_ROOT, Integer.MAX_VALUE, null)
-            mediaLibrarySession.notifyChildrenChanged(it, UAMP_BROWSABLE_ROOT, Integer.MAX_VALUE, null)
-            mediaLibrarySession.notifySearchResultChanged(it, UAMP_PLAYLISTS_ROOT, Integer.MAX_VALUE, null)
-            mediaLibrarySession.notifyChildrenChanged(it, UAMP_PLAYLISTS_ROOT, Integer.MAX_VALUE, null)
-        }
+        notifyChange(emptyList())
 
-        checkInit(true)
-        if (true || login) {
-            // TODO: this causes a crash, which is better than the player being stuck with cached state, so leave this as-is
-//            mediaLibrarySession = newLibrarySession()
-
-
-            logger.info("requesting whenReady")
-            mediaSource.whenReady { successfullyInitialized ->
-                logger.info("whenReady fired")
-                serviceScope.launch(Dispatchers.Main) {
-                    logger.info("whenReady coroutine")
-                    if (!successfullyInitialized) {
-                        future.set(SessionResult(getAuthSessionError()))
-                        return@launch
-                    }
-
-//                    player = newPlayer()
-//                    mediaLibrarySession = newLibrarySession()
-
-                    mediaLibrarySession.clearReplicatedLibraryError()
-                    mediaLibrarySession.setPlaybackException(null)
-                    mediaLibrarySession.sessionExtras = Bundle.EMPTY
-                    mediaLibrarySession.connectedControllers
-                        .filter { it.packageName != packageName }
-                        .forEach { controller ->
-                            logger.info("notifying controller: ${controller.packageName}")
-                            mediaLibrarySession.notifyChildrenChanged(controller, UAMP_BROWSABLE_ROOT, Integer.MAX_VALUE, null)
-                            //mediaLibrarySession.notifyChildrenChanged(controller, UAMP_PLAYLISTS_ROOT, Integer.MAX_VALUE, null)
-                        }
-                    mediaLibrarySession.getSubscribedControllers("/").forEach {  }
-                    future.set(SessionResult(SessionResult.RESULT_SUCCESS))
+        plexServer = null
+        checkInit()
+        if (login) {
+            mediaLibrarySession.clearReplicatedLibraryError()
+            mediaLibrarySession.setPlaybackException(null)
+            mediaLibrarySession.sessionExtras = Bundle.EMPTY
+            mediaLibrarySession.connectedControllers
+                .filter { it.packageName != packageName }
+                .forEach { controller ->
+                    logger.info("notifying controller: ${controller.packageName}")
+                    mediaLibrarySession.notifyChildrenChanged(
+                        controller,
+                        UAMP_BROWSABLE_ROOT,
+                        Integer.MAX_VALUE,
+                        null
+                    )
                 }
-            }
+            future.set(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
         return true
     }
 
-    val cacheWorkRequest: WorkRequest = OneTimeWorkRequestBuilder<CacheWorker>().build()
+    fun notifyChange(parents: List<String>) {
+        logger.info("notifying change: ${parents.size}: ${parents.joinToString()}")
+        mBrowser?.let {
+            mediaLibrarySession.notifySearchResultChanged(
+                it,
+                UAMP_BROWSABLE_ROOT,
+                Integer.MAX_VALUE,
+                null
+            )
+            mediaLibrarySession.notifyChildrenChanged(
+                it,
+                UAMP_BROWSABLE_ROOT,
+                Integer.MAX_VALUE,
+                null
+            )
+            mediaLibrarySession.notifySearchResultChanged(
+                it,
+                UAMP_PLAYLISTS_ROOT,
+                Integer.MAX_VALUE,
+                null
+            )
+            mediaLibrarySession.notifyChildrenChanged(
+                it,
+                UAMP_PLAYLISTS_ROOT,
+                Integer.MAX_VALUE,
+                null
+            )
 
-    fun checkInit(force: Boolean = false) {
-        logger.info("check init")
-        if (this::mediaSource.isInitialized && !force) {
-            logger.info("already init")
-            return
-        }
-
-        WorkManager.getInstance(applicationContext).enqueue(cacheWorkRequest)
-
-        // The media library is built from a remote JSON file. We'll create the source here,
-        // and then use a suspend function to perform the download off the main thread.
-        mediaSource = PlexSource(plexToken!!, this)
-        serviceScope.launch {
-            try {
-                mediaSource.load()
-            } catch (exc: AuthorizationException) {
-                logger.info("load auth err, resetting auth")
-                plexUtil.clearToken()
-                requireLogin()
-            } catch (exc: Exception) {
-                logger.error("error occurred while loading media source: ${exc.message} ${exc.stackTraceToString()}")
+            parents.forEach { parent ->
+                mediaLibrarySession.notifySearchResultChanged(
+                    it,
+                    parent,
+                    Integer.MAX_VALUE,
+                    null
+                )
+                mediaLibrarySession.notifyChildrenChanged(
+                    it,
+                    parent,
+                    Integer.MAX_VALUE,
+                    null
+                )
             }
         }
+    }
 
-        if (force) {
-            logger.info("updating music source")
-            browseTree.updateMusicSource(mediaSource)
+    fun checkInit() {
+        if (plexServer == null) {
+            serviceScope.launch {
+                val server = PlexUtil.findServer(applicationContext, plexToken!!)
+                if (server == null) {
+                    logger.error("failed to get server")
+                    return@launch
+                }
+                plexServer = server
+                notifyChange(emptyList())
+            }
+            initCacheSync()
         }
+    }
+
+    private fun initCacheSync() {
+        val workConstraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val cacheWorkRequest = OneTimeWorkRequestBuilder<CacheWorker>()
+            .setConstraints(workConstraints)
+            .build()
+
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            "oneTimeCacheSync",
+            ExistingWorkPolicy.KEEP,
+            cacheWorkRequest
+        )
+
+        val periodicCacheSyncRequest = PeriodicWorkRequestBuilder<CacheWorker>(
+            3, TimeUnit.HOURS
+        ).setConstraints(workConstraints)
+            .setInitialDelay(3, TimeUnit.HOURS)
+            .build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "cacheSync",
+            ExistingPeriodicWorkPolicy.KEEP,
+            periodicCacheSyncRequest
+        )
     }
 
     private fun requireLogin() {
@@ -416,45 +452,41 @@ class PlexMediaService : MediaLibraryService() {
         }
         checkInit()
 
-        if (parentMediaId == UAMP_PLAYLISTS_ROOT || parentMediaId == UAMP_BROWSABLE_ROOT) {
-            if (parentMediaId == UAMP_BROWSABLE_ROOT) {
-                serviceScope.launch {
-                    try {
-                        mediaSource.load()
-                    } catch (exc: AuthorizationException) {
-                        plexUtil.clearToken()
-                        requireLogin()
-                    } catch (exc: Exception) {
-                        logger.error("error occurred while loading media source: ${exc.message} ${exc.stackTraceToString()}")
-                    }
-                }
-            }
-            // If the media source is ready, the results will be set synchronously here.
-            mediaSource.whenReady { successfullyInitialized ->
-                if (successfullyInitialized) {
-                    browseTree.refresh()
-                    val children =
-                        browseTree[parentMediaId]?.sortedBy { item -> item.mediaMetadata.title.toString() }
-                            ?: listOf()
-                    logger.info("Sending ${children.size} results for $parentMediaId")
-                    result.set(LibraryResult.ofItemList(children, null))
-                } else {
-                    logger.info("Failed to load results for $parentMediaId")
-                    result.set(LibraryResult.ofError(SessionError.ERROR_IO))
-                }
-            }
-        } else {
-            val playlistFuture = loadPlaylist(parentMediaId)
-            playlistFuture.addListener({
-                try {
-                    val res = playlistFuture.get()
-                    result.set(LibraryResult.ofItemList(res, null))
-                } catch (exc: Exception) {
-                    logger.info("Failed to load results for $parentMediaId")
-                    result.set(LibraryResult.ofError(SessionError.ERROR_IO))
-                }
-            }, MoreExecutors.directExecutor())
+        if (parentMediaId == UAMP_BROWSABLE_ROOT) {
+            result.set(
+                LibraryResult.ofItemList(
+                    browsableRootMediaItems(applicationContext), null
+                )
+            )
+            return
         }
+
+        if (plexServer == null) {
+            result.set(LibraryResult.ofItemList(emptyList(), null))
+            return
+        }
+
+        if (parentMediaId == UAMP_PLAYLISTS_ROOT) {
+            logger.info("loading")
+            val playlists = lastPlaylists.map {
+                MediaItem.Builder().from(plexServer!!, it).build()
+            }
+            logger.info("Sending ${playlists.size} results for $parentMediaId")
+
+            result.set(LibraryResult.ofItemList(playlists, null))
+            return
+        }
+
+        val playlistFuture = loadPlaylist(parentMediaId)
+        playlistFuture.addListener({
+            try {
+                val res = playlistFuture.get()
+                result.set(LibraryResult.ofItemList(res, null))
+            } catch (exc: Exception) {
+                logger.info("Failed to load results for $parentMediaId")
+                result.set(LibraryResult.ofError(SessionError.ERROR_IO))
+            }
+        }, MoreExecutors.directExecutor())
     }
 
     fun loadPlaylist(parentMediaId: String): ListenableFuture<List<MediaItem>> {
@@ -478,31 +510,44 @@ class PlexMediaService : MediaLibraryService() {
         }
 
         serviceScope.launch {
+            if (plexServer == null) {
+                plexServer = PlexUtil.findServer(applicationContext, plexToken!!)
+                if (plexServer != null) {
+                    notifyChange(emptyList())
+                }
+            }
+
+            if (plexServer == null) {
+                logger.error("failed to find plex server")
+                future.set(emptyList())
+                return@launch
+            }
+
             logger.info("loading plist ${playlistId}")
+            var playlistItems: Array<MediaItemEntity> = arrayOf()
             try {
-                mediaSource.loadPlaylist(playlistId)
+                playlistItems = mediaSource.getPlaylistItemsAsync(playlistId.toLong())
             } catch (exc: AuthorizationException) {
                 logger.error("auth err: ${exc}")
                 plexUtil.clearToken()
                 requireLogin()
                 future.setException(exc)
+                return@launch
             } catch (exc: Exception) {
                 logger.error("error occurred while loading playlist ${playlistId}: ${exc.message} ${exc.stackTraceToString()}")
                 future.setException(exc)
+                return@launch
             }
-        }
 
-        mediaSource.playlistWhenReady(playlistId) { plist ->
-            logger.error("plist when ready")
-            browseTree.storePlaylist(plist)
-            if (plist != null && pageNum == null && plist.leafCount > PAGE_SIZE) {
-                val numPages = ceil(plist.leafCount.toDouble() / PAGE_SIZE).toInt()
+
+            if (pageNum == null && playlistItems.size > PAGE_SIZE) {
+                val numPages = ceil(playlistItems.size.toDouble() / PAGE_SIZE).toInt()
                 val children = mutableListOf<MediaItem>()
                 logger.info("Sending paginated playlist results: $numPages")
                 for (i in 0 until numPages) {
                     val start = (i * PAGE_SIZE) + 1
-                    val end = min(((i + 1) * PAGE_SIZE), plist.leafCount.toInt())
-                    val id = "${plist.ratingKey}/page_$i"
+                    val end = min(((i + 1) * PAGE_SIZE), playlistItems.size)
+                    val id = "${playlistId}/page_$i"
 
                     children += MediaItem.Builder().apply {
                         setMediaId(id)
@@ -515,25 +560,23 @@ class PlexMediaService : MediaLibraryService() {
                     }.build()
                 }
                 future.set(children)
-            } else if (plist != null) {
+            } else if (playlistItems.isNotEmpty()) {
                 val children = mutableListOf<MediaItem>()
-                var plistItems = plist.loadedItems()
                 if (pageNum != null) {
-                    val totalItems = plistItems.size
+                    val totalItems = playlistItems.size
                     val startIndex = pageNum * PAGE_SIZE
                     val endExclusive = min((pageNum + 1) * PAGE_SIZE, totalItems)
 
-                    plistItems = if (startIndex >= totalItems) {
+                    playlistItems = if (startIndex >= totalItems) {
                         emptyArray()
                     } else {
-                        plistItems.sliceArray(IntRange(startIndex, endExclusive - 1))
+                        playlistItems.sliceArray(IntRange(startIndex, endExclusive - 1))
                     }
                 }
-                plistItems.forEach { item ->
-                    if (item !is Track) {
-                        return@forEach
-                    }
-                    children += MediaItem.Builder().buildMeta(item, playlistId, pageNum?.toString())
+
+                playlistItems.forEach { item ->
+                    children += MediaItem.Builder()
+                        .buildMeta(plexServer!!, item, playlistId, pageNum?.toString())
                 }
                 logger.info("Sending playlist results: ${children.size} ${playlistId}")
                 future.set(children)
@@ -874,23 +917,38 @@ class PlexMediaService : MediaLibraryService() {
             // so we have to hack around that:
             //      we lose the media info - and have to refetch it from the browseTree
             //      we're given a mediaId but if you want the player to track a playlist, you have to build a playlist
-            items = mediaItems.map { browseTree.getByID(it.mediaId) ?: MediaItem.Builder().build() }
+            val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+            serviceScope.launch {
+                val server = PlexUtil.findServer(applicationContext, plexToken!!)
 
-            val splitMediaId = mediaItems[0].mediaId.split('/')
-            val playlistId = splitMediaId[0]
-            items = browseTree[playlistId] ?: emptyList()
-            val startIndex = items.indexOfFirst { it.mediaId == mediaItems[0].mediaId }
+                val splitMediaId = mediaItems[0].mediaId.split('/')
+                val playlistId = splitMediaId[0]
 
-            // Prefetch next tracks using ExoPlayer's DownloadManager
-            prefetchNextTracks(5)
+                val pageNum = if (splitMediaId.size > 2) {
+                    splitMediaId[1].replace("page_", "")
+                } else {
+                    null
+                }
 
-            return super.onSetMediaItems(
-                mediaSession,
-                controller,
-                items,
-                startIndex,
-                startPositionMs
-            )
+                items = playlistRepository.getPlaylistSongs(playlistId.toLong()).map {
+                    val mi = MediaItem.Builder().buildMeta(server!!, it, playlistId, pageNum)
+                    logger.info("URI: ${mi.localConfiguration?.uri}")
+                    mi
+                }
+                val startIndex = items.indexOfFirst { it.mediaId == mediaItems[0].mediaId }
+
+                // Prefetch next tracks using ExoPlayer's DownloadManager
+                prefetchNextTracks(5)
+
+                future.set(
+                    MediaSession.MediaItemsWithStartPosition(
+                        items,
+                        startIndex,
+                        startPositionMs
+                    )
+                )
+            }
+            return future
         }
     }
 

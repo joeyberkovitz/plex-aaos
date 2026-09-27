@@ -3,9 +3,6 @@ package us.berkovitz.plexaaos
 import android.accounts.Account
 import android.accounts.AccountManager
 import android.content.Context
-import android.os.Bundle
-import us.berkovitz.plexaaos.library.PlexSource
-import us.berkovitz.plexaaos.library.PlexSource.Companion.logger
 import us.berkovitz.plexapi.config.Config
 import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.MyPlexAccount
@@ -36,6 +33,7 @@ class PlexUtil(private val ctx: Context) {
         )
         val finalToken = Config.X_PLEX_IDENTIFIER + "|" + token
         accountManager.setPassword(account, finalToken)
+        plexServer = null
     }
 
     fun clearToken() {
@@ -47,6 +45,7 @@ class PlexUtil(private val ctx: Context) {
     }
 
     companion object {
+        val logger = PlexLoggerFactory.loggerFor(PlexUtil::class)
         private var plexServer: PlexServer? = null
 
         suspend fun getServers(token: String): List<MyPlexResource> {

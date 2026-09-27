@@ -10,6 +10,8 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import us.berkovitz.plexaaos.PlexLoggerFactory
+import us.berkovitz.plexaaos.PlexMediaService
 import us.berkovitz.plexaaos.PlexUtil
 import us.berkovitz.plexaaos.data.database.PlexDatabase
 import us.berkovitz.plexaaos.data.media.MediaItemEntity
@@ -27,7 +29,7 @@ class CacheWorker @AssistedInject constructor(
     private var plexDatabase: PlexDatabase
 ) : CoroutineWorker(appContext, workerParams) {
     companion object {
-        const val TAG = "CACHE"
+        val logger = PlexLoggerFactory.loggerFor(CacheWorker::class)
     }
 
     override suspend fun doWork(): Result {
@@ -39,19 +41,23 @@ class CacheWorker @AssistedInject constructor(
 
 
     suspend fun refreshCache() {
-        Log.i("CACHE", "cache worker starting")
+        logger.info("cache worker starting")
         val plexUtil = PlexUtil(appContext)
         val token = plexUtil.getToken() ?: return
 
         val server = PlexUtil.findServer(appContext, token) ?: return
 
         val playlists = server.playlists(PlaylistType.AUDIO)
-        Log.i("CACHE", "got playlists: ${playlists.contentToString()}")
+        logger.info("got playlists: ${playlists.contentToString()}")
 
-        val seenIds = playlists.map { it.ratingKey }.filterNotNull().toLongArray()
-        val toDelete = plexDatabase.playlistDao().getAllPlaylists().filter { !seenIds.contains(it.id) }.map { it.id }.toLongArray()
+        val seenIds = playlists.mapNotNull { it.ratingKey }.toLongArray()
+        val toDelete =
+            plexDatabase.playlistDao().getAllPlaylists().filter { !seenIds.contains(it.id) }
+                .map { it.id }.toLongArray()
         plexDatabase.playlistDao().deletePlaylistEntriesByPlaylistID(*toDelete)
         plexDatabase.playlistDao().deletePlaylists(*toDelete)
+
+        // TODO: delete unseen songs
 
         for (playlist in playlists) {
             cachePlaylist(playlist, server)
@@ -61,7 +67,7 @@ class CacheWorker @AssistedInject constructor(
     suspend fun cachePlaylist(playlist: Playlist, server: PlexServer) {
         val playlistIdLong = playlist.ratingKey
         if (playlistIdLong == null) {
-            Log.w(TAG, "invalid playlist ID: $playlistIdLong")
+            logger.warn("invalid playlist ID: $playlistIdLong")
             return
         }
 
@@ -69,7 +75,7 @@ class CacheWorker @AssistedInject constructor(
         val needsUpdate =
             existingPlaylist == null || existingPlaylist.updatedAt < playlist.updatedAt
         if (!needsUpdate) {
-            Log.i(TAG, "playlist ${playlist.key} already up to date")
+            logger.info("playlist ${playlist.key} already up to date")
             return
         }
 
@@ -121,11 +127,12 @@ class CacheWorker @AssistedInject constructor(
             )
         }.toTypedArray()))
 
-        val playlistIconUri: String? = if(!playlist.composite.isNullOrEmpty() && playlist.icon.isNullOrEmpty()) {
-            playlist.composite
-        } else {
-            null
-        }
+        val playlistIconUri: String? =
+            if (!playlist.composite.isNullOrEmpty() && playlist.icon.isNullOrEmpty()) {
+                playlist.composite
+            } else {
+                null
+            }
 
         // only mark the playlist updated if entries are created as well
         plexDatabase.withTransaction {
@@ -137,13 +144,12 @@ class CacheWorker @AssistedInject constructor(
                     playlist.duration,
                     playlistIconUri,
                     playlist.updatedAt
-
                 )
             )
 
             plexDatabase.playlistDao().insertPlaylistEntries(*songsToAdd)
         }
 
-        Log.i(TAG, "playlist $playlistIdLong cached")
+        logger.info("playlist $playlistIdLong cached")
     }
 }

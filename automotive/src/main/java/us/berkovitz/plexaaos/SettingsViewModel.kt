@@ -56,6 +56,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _signOutEvent = MutableSharedFlow<Unit>()
     val signOutEvent: SharedFlow<Unit> = _signOutEvent.asSharedFlow()
 
+    private val _skipSmart = MutableStateFlow<Boolean>(true)
+    val skipSmart: StateFlow<Boolean> = _skipSmart.asStateFlow()
+
     init {
         loadData()
     }
@@ -101,6 +104,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     _users.value = emptyList()
                 }
             }
+
+            launch {
+                val savedSkipSmart = withContext(Dispatchers.IO) {
+                    AndroidStorage.getSkipSmart(getApplication())
+                }
+                _skipSmart.value = savedSkipSmart
+            }
         }
     }
 
@@ -141,6 +151,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             withContext(Dispatchers.Main) {
                 notifyRefresh()
             }
+        }
+    }
+
+    fun setSkipSmart(skip: Boolean) {
+        if (skip == _skipSmart.value) return
+        applicationScope.launch {
+            withContext(Dispatchers.IO) {
+                AndroidStorage.setSkipSmart(skip, getApplication())
+            }
+            _skipSmart.value = skip
         }
     }
 

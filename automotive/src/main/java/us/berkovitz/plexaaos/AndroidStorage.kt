@@ -15,6 +15,7 @@ object AndroidStorage {
     private const val REPEAT_MODE = "repeat_mode"
     private const val AUDIO_QUALITY = "audio_quality"
     private const val TRANSCODE_QUALITY = "transcode_quality"
+    private const val SKIP_SMART = "skip_smart"
 
     fun getKeySync(key: String, context: Context): String? {
         return context.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)
@@ -108,5 +109,13 @@ object AndroidStorage {
 
     suspend fun setTranscodeQuality(quality: Int, context: Context){
         return setKey(TRANSCODE_QUALITY, quality.toString(), context)
+    }
+
+    suspend fun getSkipSmart(context: Context): Boolean {
+        return getKey(SKIP_SMART, context)?.toBoolean() ?: true
+    }
+
+    suspend fun setSkipSmart(skip: Boolean, context: Context){
+        return setKey(SKIP_SMART, skip.toString(), context)
     }
 }

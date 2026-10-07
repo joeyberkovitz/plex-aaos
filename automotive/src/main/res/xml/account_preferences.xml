@@ -22,7 +22,13 @@
             android:entries="@array/transcode_quality_entries"
             android:entryValues="@array/transcode_quality_values"
             android:defaultValue="128" />
-        
+
+        <SwitchPreference
+            android:key="pref_skip_smart"
+            android:title="@string/skip_smart_title"
+            android:summary="@string/skip_smart_summary"
+            android:defaultValue="true" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

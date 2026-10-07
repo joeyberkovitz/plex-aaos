@@ -10,9 +10,11 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import us.berkovitz.plexaaos.AndroidStorage
 import us.berkovitz.plexaaos.PlexLoggerFactory
 import us.berkovitz.plexaaos.PlexMediaService
 import us.berkovitz.plexaaos.PlexUtil
+import us.berkovitz.plexaaos.SettingsViewModel
 import us.berkovitz.plexaaos.data.database.PlexDatabase
 import us.berkovitz.plexaaos.data.media.MediaItemEntity
 import us.berkovitz.plexaaos.data.media.PlaylistEntity
@@ -46,9 +48,13 @@ class CacheWorker @AssistedInject constructor(
         val token = plexUtil.getToken() ?: return
 
         val server = PlexUtil.findServer(appContext, token) ?: return
+        val skipSmart = AndroidStorage.getSkipSmart(appContext)
 
-        val playlists = server.playlists(PlaylistType.AUDIO)
-        logger.info("got playlists: ${playlists.contentToString()}")
+        val playlists = server.playlists(PlaylistType.AUDIO).filter {
+            return@filter !skipSmart || it.smart == null || !it.smart!!
+        }.sortedBy { it.leafCount }
+
+        logger.info("got playlists: ${playlists.size}")
 
         val seenIds = playlists.mapNotNull { it.ratingKey }.toLongArray()
         val toDelete =

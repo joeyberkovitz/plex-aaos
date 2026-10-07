@@ -9,6 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.ListPreference
 import androidx.preference.Preference
+import androidx.preference.SwitchPreference
 import com.android.car.ui.preference.PreferenceFragment
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -46,12 +47,14 @@ class SettingsFragment : PreferenceFragment() {
         setupServerPreference()
         setupUserPreference()
         setupSignOutPreference()
+        setupSkipSmartPreference()
 
         // Observe view model
         val serverPref = findPreference<ListPreference>("pref_server")
         val userPref = findPreference<ListPreference>("pref_switch_user")
         val audioPref = findPreference<ListPreference>("pref_audio_quality")
         val transcodePref = findPreference<ListPreference>("pref_transcode_quality")
+        val skipSmartPref = findPreference<SwitchPreference>("pref_skip_smart")
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
@@ -146,6 +149,11 @@ class SettingsFragment : PreferenceFragment() {
                         transcodePref?.value = quality.toString()
                     }
                 }
+                launch {
+                    viewModel.skipSmart.collect { skipSmart ->
+                        skipSmartPref?.isChecked = skipSmart
+                    }
+                }
             }
         }
     }
@@ -233,6 +241,15 @@ class SettingsFragment : PreferenceFragment() {
             val qualityStr = newValue as? String ?: return@setOnPreferenceChangeListener true
             val quality = qualityStr.toIntOrNull() ?: AndroidStorage.DEFAULT_TRANSCODE_QUALITY
             viewModel.setTranscodeQuality(quality)
+            true
+        }
+    }
+
+    private fun setupSkipSmartPreference() {
+        val skipSmartPref = findPreference<SwitchPreference>("pref_skip_smart")
+        skipSmartPref?.setOnPreferenceChangeListener { _, newValue ->
+            val skipMart = newValue as? Boolean ?: return@setOnPreferenceChangeListener true
+            viewModel.setSkipSmart(skipMart)
             true
         }
     }

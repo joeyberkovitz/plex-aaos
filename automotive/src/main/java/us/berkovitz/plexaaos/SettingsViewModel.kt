@@ -161,6 +161,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 AndroidStorage.setSkipSmart(skip, getApplication())
             }
             _skipSmart.value = skip
+            withContext(Dispatchers.Main) {
+                notifyRefresh()
+            }
         }
     }
 

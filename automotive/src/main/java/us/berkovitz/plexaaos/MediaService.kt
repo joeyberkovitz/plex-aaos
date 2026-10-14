@@ -32,7 +32,6 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import java.util.UUID
 import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaConstants.EXTRAS_KEY_ERROR_RESOLUTION_ACTION_INTENT_COMPAT
@@ -65,6 +64,7 @@ import us.berkovitz.plexaaos.data.media.PlaylistEntity
 import us.berkovitz.plexaaos.data.repositories.MediaItemRepository
 import us.berkovitz.plexaaos.data.repositories.PlaylistRepository
 import us.berkovitz.plexaaos.library.PlexDBSource
+import us.berkovitz.plexaaos.library.TRANSCODE_RETRY_THRESHOLD_MS
 import us.berkovitz.plexaaos.library.UAMP_BROWSABLE_ROOT
 import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
 import us.berkovitz.plexaaos.library.browsableRootMediaItems
@@ -1121,9 +1121,8 @@ class PlexMediaService : MediaLibraryService() {
                 val currentUri = mediaItem.localConfiguration?.uri?.toString()
 
                 if (transcodeUri != null && currentUri == transcodeUri) {
-                    val wasRetried = extras.getBoolean("TRANSCODE_RETRIED", false)
-
-                    if (is404 && !wasRetried) {
+                    val lastRetryTime = extras.getLong("TRANSCODE_LAST_RETRY_TIME_MS", 0)
+                    if (is404 && (System.currentTimeMillis() - lastRetryTime > TRANSCODE_RETRY_THRESHOLD_MS)) {
                         logger.warn("Transcode session 404 error for $currentUri, retrying with new transcode session ID")
                         message = "transcode session expired, retrying"
 

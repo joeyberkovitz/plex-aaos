@@ -317,9 +317,11 @@ fun createNewTranscodeSessionUri(transcodeUriStr: String): String {
     return builder.build().toString()
 }
 
+const val TRANSCODE_RETRY_THRESHOLD_MS = 10 * 1000; // 10 seconds
+
 /**
  * Creates a new MediaItem with an updated transcodeSessionId in its URI and TRANSCODE_URI extra,
- * marking it as retried.
+ * incrementing the transcode retry count and updating the last retry timestamp.
  */
 fun MediaItem.renewTranscodeSession(): MediaItem {
     val extras = mediaMetadata.extras ?: Bundle()
@@ -328,7 +330,7 @@ fun MediaItem.renewTranscodeSession(): MediaItem {
 
     val newExtras = Bundle(extras).apply {
         putString("TRANSCODE_URI", newTranscodeUri)
-        putBoolean("TRANSCODE_RETRIED", true)
+        putLong("TRANSCODE_LAST_RETRY_TIME_MS", System.currentTimeMillis())
     }
     val newMetadata = mediaMetadata.buildUpon()
         .setExtras(newExtras)

@@ -290,9 +290,6 @@ fun MediaItem.Builder.buildMeta(
     return this.build()
 }
 
-/**
- * Updates the transcodeSessionId query parameter in a transcode URI with a new session ID.
- */
 fun createNewTranscodeSessionUri(transcodeUriStr: String): String {
     val newSessionId = UUID.randomUUID().toString()
     val uri = transcodeUriStr.toUri()
@@ -319,10 +316,6 @@ fun createNewTranscodeSessionUri(transcodeUriStr: String): String {
 
 const val TRANSCODE_RETRY_THRESHOLD_MS = 10 * 1000; // 10 seconds
 
-/**
- * Creates a new MediaItem with an updated transcodeSessionId in its URI and TRANSCODE_URI extra,
- * incrementing the transcode retry count and updating the last retry timestamp.
- */
 fun MediaItem.renewTranscodeSession(): MediaItem {
     val extras = mediaMetadata.extras ?: Bundle()
     val transcodeUri = extras.getString("TRANSCODE_URI") ?: localConfiguration?.uri?.toString() ?: return this

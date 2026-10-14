@@ -29,6 +29,7 @@ import us.berkovitz.plexaaos.data.media.PlaylistEntity
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.media.Track
+import java.util.UUID
 
 fun browsableRootMediaItems(ctx: Context): List<MediaItem> {
     return listOf(
@@ -287,6 +288,56 @@ fun MediaItem.Builder.buildMeta(
         setUri(mediaUri.toUri())
     }
     return this.build()
+}
+
+/**
+ * Updates the transcodeSessionId query parameter in a transcode URI with a new session ID.
+ */
+fun createNewTranscodeSessionUri(transcodeUriStr: String): String {
+    val newSessionId = UUID.randomUUID().toString()
+    val uri = transcodeUriStr.toUri()
+    val builder = uri.buildUpon().clearQuery()
+
+    var updated = false
+    for (paramName in uri.queryParameterNames) {
+        if (paramName == "transcodeSessionId") {
+            builder.appendQueryParameter(paramName, newSessionId)
+            updated = true
+        } else {
+            for (value in uri.getQueryParameters(paramName)) {
+                builder.appendQueryParameter(paramName, value)
+            }
+        }
+    }
+
+    if (!updated) {
+        builder.appendQueryParameter("transcodeSessionId", newSessionId)
+    }
+
+    return builder.build().toString()
+}
+
+/**
+ * Creates a new MediaItem with an updated transcodeSessionId in its URI and TRANSCODE_URI extra,
+ * marking it as retried.
+ */
+fun MediaItem.renewTranscodeSession(): MediaItem {
+    val extras = mediaMetadata.extras ?: Bundle()
+    val transcodeUri = extras.getString("TRANSCODE_URI") ?: localConfiguration?.uri?.toString() ?: return this
+    val newTranscodeUri = createNewTranscodeSessionUri(transcodeUri)
+
+    val newExtras = Bundle(extras).apply {
+        putString("TRANSCODE_URI", newTranscodeUri)
+        putBoolean("TRANSCODE_RETRIED", true)
+    }
+    val newMetadata = mediaMetadata.buildUpon()
+        .setExtras(newExtras)
+        .build()
+
+    return buildUpon()
+        .setUri(newTranscodeUri.toUri())
+        .setMediaMetadata(newMetadata)
+        .build()
 }
 
 

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.annotation.OptIn
+import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -20,6 +21,7 @@ import androidx.media3.common.Player.REPEAT_MODE_ONE
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
@@ -30,6 +32,7 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import java.util.UUID
 import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaConstants.EXTRAS_KEY_ERROR_RESOLUTION_ACTION_INTENT_COMPAT
@@ -67,6 +70,7 @@ import us.berkovitz.plexaaos.library.UAMP_PLAYLISTS_ROOT
 import us.berkovitz.plexaaos.library.browsableRootMediaItems
 import us.berkovitz.plexaaos.library.buildMeta
 import us.berkovitz.plexaaos.library.from
+import us.berkovitz.plexaaos.library.renewTranscodeSession
 import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.myplex.AuthorizationException
 import java.io.File
@@ -212,9 +216,11 @@ class PlexMediaService : MediaLibraryService() {
                 .setMediaSourceFactory(DefaultMediaSourceFactory(cacheDataSourceFactory))
                 .setLoadControl(
                     DefaultLoadControl.Builder()
+                        // Only buffer at most 2 minutes because Plex has an idle transcoding session timeout of 3 minutes.
+                        // This allows for smooth playback transitions while avoiding this timeout.
                         .setBufferDurationsMs(
                             10 * 1000,
-                            5 * 60 * 1000,
+                            2 * 60 * 1000,
                             10 * 1000,
                             10 * 1000,
                         )
@@ -1099,12 +1105,12 @@ class PlexMediaService : MediaLibraryService() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            var message = "player error";
-            logger.error("Player error: " + error.errorCodeName + " (" + error.errorCode + ")");
-            if (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
-                || error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
-            ) {
-                message = "media not found";
+            var message = "player error"
+            logger.error("Player error: " + error.errorCodeName + " (" + error.errorCode + "): " + error.message)
+
+            val is404 = is404Error(error)
+            if (is404) {
+                message = "media not found"
             }
 
             val mediaItem = player.currentMediaItem
@@ -1114,21 +1120,38 @@ class PlexMediaService : MediaLibraryService() {
                 val rawUri = extras?.getString("URI")
                 val currentUri = mediaItem.localConfiguration?.uri?.toString()
 
-                if (transcodeUri != null && rawUri != null && currentUri == transcodeUri) {
-                    logger.warn("Transcoding failed for ${currentUri}, falling back to raw stream at $rawUri")
-                    message = "transcoding failed"
+                if (transcodeUri != null && currentUri == transcodeUri) {
+                    val wasRetried = extras.getBoolean("TRANSCODE_RETRIED", false)
 
-                    val newMediaItem = mediaItem.buildUpon()
-                        .setUri(rawUri)
-                        .build()
+                    if (is404 && !wasRetried) {
+                        logger.warn("Transcode session 404 error for $currentUri, retrying with new transcode session ID")
+                        message = "transcode session expired, retrying"
 
-                    val currentIndex = player.currentMediaItemIndex
-                    val playbackPosition = player.currentPosition
+                        val newMediaItem = mediaItem.renewTranscodeSession()
 
-                    player.replaceMediaItem(currentIndex, newMediaItem)
-                    player.seekTo(currentIndex, playbackPosition)
-                    player.prepare()
-                    player.play()
+                        val currentIndex = player.currentMediaItemIndex
+                        val playbackPosition = player.currentPosition
+
+                        player.replaceMediaItem(currentIndex, newMediaItem)
+                        player.seekTo(currentIndex, playbackPosition)
+                        player.prepare()
+                        player.play()
+                    } else if (rawUri != null) {
+                        logger.warn("Transcoding failed for ${currentUri}, falling back to raw stream at $rawUri")
+                        message = "transcoding failed"
+
+                        val newMediaItem = mediaItem.buildUpon()
+                            .setUri(rawUri.toUri())
+                            .build()
+
+                        val currentIndex = player.currentMediaItemIndex
+                        val playbackPosition = player.currentPosition
+
+                        player.replaceMediaItem(currentIndex, newMediaItem)
+                        player.seekTo(currentIndex, playbackPosition)
+                        player.prepare()
+                        player.play()
+                    }
                 }
             }
 
@@ -1138,6 +1161,18 @@ class PlexMediaService : MediaLibraryService() {
                 Toast.LENGTH_LONG
             ).show()
         }
+    }
+
+    private fun is404Error(error: PlaybackException): Boolean {
+        var cause: Throwable? = error.cause
+        while (cause != null) {
+            if (cause is HttpDataSource.InvalidResponseCodeException) {
+                return cause.responseCode == 404
+            }
+            cause = cause.cause
+        }
+        return error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                || error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
     }
 
     private fun saveLastSong(mediaIdIn: String?, positionIn: Long?) {

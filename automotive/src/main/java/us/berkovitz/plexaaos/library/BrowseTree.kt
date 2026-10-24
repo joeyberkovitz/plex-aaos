@@ -29,6 +29,7 @@ import us.berkovitz.plexaaos.data.media.PlaylistEntity
 import us.berkovitz.plexapi.media.Playlist
 import us.berkovitz.plexapi.media.PlexServer
 import us.berkovitz.plexapi.media.Track
+import java.util.UUID
 
 fun browsableRootMediaItems(ctx: Context): List<MediaItem> {
     return listOf(
@@ -287,6 +288,51 @@ fun MediaItem.Builder.buildMeta(
         setUri(mediaUri.toUri())
     }
     return this.build()
+}
+
+fun createNewTranscodeSessionUri(transcodeUriStr: String): String {
+    val newSessionId = UUID.randomUUID().toString()
+    val uri = transcodeUriStr.toUri()
+    val builder = uri.buildUpon().clearQuery()
+
+    var updated = false
+    for (paramName in uri.queryParameterNames) {
+        if (paramName == "transcodeSessionId") {
+            builder.appendQueryParameter(paramName, newSessionId)
+            updated = true
+        } else {
+            for (value in uri.getQueryParameters(paramName)) {
+                builder.appendQueryParameter(paramName, value)
+            }
+        }
+    }
+
+    if (!updated) {
+        builder.appendQueryParameter("transcodeSessionId", newSessionId)
+    }
+
+    return builder.build().toString()
+}
+
+const val TRANSCODE_RETRY_THRESHOLD_MS = 10 * 1000; // 10 seconds
+
+fun MediaItem.renewTranscodeSession(): MediaItem {
+    val extras = mediaMetadata.extras ?: Bundle()
+    val transcodeUri = extras.getString("TRANSCODE_URI") ?: localConfiguration?.uri?.toString() ?: return this
+    val newTranscodeUri = createNewTranscodeSessionUri(transcodeUri)
+
+    val newExtras = Bundle(extras).apply {
+        putString("TRANSCODE_URI", newTranscodeUri)
+        putLong("TRANSCODE_LAST_RETRY_TIME_MS", System.currentTimeMillis())
+    }
+    val newMetadata = mediaMetadata.buildUpon()
+        .setExtras(newExtras)
+        .build()
+
+    return buildUpon()
+        .setUri(newTranscodeUri.toUri())
+        .setMediaMetadata(newMetadata)
+        .build()
 }
 
 
